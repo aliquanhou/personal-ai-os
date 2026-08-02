@@ -111,13 +111,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     return fetch(`/api/memory/conversations/${id}`)
       .then(res => res.json())
       .then(data => {
-        const msgs = (data.messages || []).map((m: any) => ({
-          id: m.id || nextId(),
-          role: m.role as Message['role'],
-          content: m.content || '',
-          toolCalls: m.metadata?.tool_calls || undefined,
-          timestamp: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
-        }));
+        const msgs = (data.messages || []).map((m: any) => {
+          // Parse metadata — it might be a JSON string or already an object
+          let meta = m.metadata;
+          if (typeof meta === 'string') {
+            try { meta = JSON.parse(meta); } catch { meta = {}; }
+          }
+          return {
+            id: m.id || nextId(),
+            role: m.role as Message['role'],
+            content: m.content || '',
+            toolCalls: meta?.tool_calls || undefined,
+            agent: meta?.agent || undefined,
+            iterations: meta?.iterations || undefined,
+            timestamp: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
+          };
+        });
         if (msgs.length > 0) {
           msgCounter = msgs.length + 1;
           set({ messages: msgs });

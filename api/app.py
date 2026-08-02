@@ -348,6 +348,17 @@ async def chat(req: ChatRequest):
         resume=req.resume,
     )
 
+    # Save assistant response with full tool trace (v1.1.2: enables session restore)
+    memory.save_message(
+        session_id, "assistant", result.output,
+        {
+            "agent": req.agent,
+            "iterations": result.iterations,
+            "tool_calls": result.tool_calls,
+            "checkpoint_count": result.checkpoint_count,
+        },
+    )
+
     return ChatResponse(
         session_id=session_id,
         agent=req.agent,

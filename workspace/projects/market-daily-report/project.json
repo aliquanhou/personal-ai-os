@@ -1,0 +1,9 @@
+{
+  "name": "market-daily-report",
+  "slug": "market-daily-report",
+  "description": "每天9点自动生成市场日报的定时任务脚本",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T16:25:36.440325+00:00",
+  "updated_at": "2026-08-02T16:25:36.440325+00:00"
+}

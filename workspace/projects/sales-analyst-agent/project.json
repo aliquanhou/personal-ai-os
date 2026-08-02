@@ -1,0 +1,9 @@
+{
+  "name": "sales-analyst-agent",
+  "slug": "sales-analyst-agent",
+  "description": "销售数据分析数字员工：每日读取Excel销售数据，自动分析销售排名、识别异常订单、生成日报、保存历史记录、失败自动重试",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T16:28:20.069501+00:00",
+  "updated_at": "2026-08-02T16:28:20.069501+00:00"
+}

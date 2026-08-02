@@ -1,7 +1,7 @@
-/** API client for Personal AI OS v1.0 */
+/** API client for Personal AI OS v1.1.2 */
 
 const BASE = '/api';
-const TIMEOUT_MS = 120000; // 2 minute timeout for agent tasks
+const TIMEOUT_MS = 300000; // 5 minute timeout for complex agent tasks
 
 export interface ChatResponse {
   session_id: string;
@@ -35,7 +35,10 @@ export async function sendMessage(message: string, agent: string = 'ceo', sessio
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, agent, session_id: sessionId || '' }),
   });
-  if (!res.ok) throw new Error(`Chat error: ${res.status} — ${await res.text()}`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '无法读取错误详情');
+    throw new Error(`服务器错误 ${res.status}: ${text.slice(0, 200)}`);
+  }
   return res.json();
 }
 

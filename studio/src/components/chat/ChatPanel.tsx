@@ -91,12 +91,52 @@ export default function ChatPanel() {
         iterations: result.iterations,
       }
       addMessage(assistantMsg)
-      saveCurrentSession()  // persist after each exchange
+      saveCurrentSession()
     } catch (err: any) {
+      const errMsg = err.message || String(err)
+      let diagnostic = ''
+
+      if (err.name === 'AbortError' || errMsg.includes('abort') || errMsg.includes('signal')) {
+        diagnostic = `⏱️ 任务超时（超过 5 分钟）
+
+最后状态：
+• Agent: ${currentAgent}
+• 已运行: ${elapsed} 秒
+• 当前阶段: ${STATUS_PHASES[statusIdx]}
+
+可能原因：
+1. 任务太复杂，Agent 执行时间超过限制
+2. LLM API 响应慢
+3. Agent 在等待某个阻塞操作
+
+建议：
+• 将大任务拆分为多个小任务
+• 用 python main.py chat 在 CLI 执行（无超时限制）
+• 检查 DeepSeek API 是否正常`
+      } else if (errMsg.includes('NetworkError') || errMsg.includes('fetch')) {
+        diagnostic = `🔌 网络连接失败
+
+• 后端服务可能未启动
+• 检查: curl http://127.0.0.1:8001/health`
+      } else {
+        diagnostic = `❌ 任务执行失败
+
+错误: ${errMsg}
+
+可能原因：
+1. 后端 Agent Runtime 异常
+2. LLM API 调用失败
+3. 工具执行出错
+
+建议：
+• 查看后端日志: python main.py serve 的终端输出
+• 用简单任务测试: "说OK"`
+      }
+
       addMessage({
         id: nextId(),
         role: 'system' as const,
-        content: `❌ 错误: ${err.message}`,
+        content: diagnostic,
         timestamp: Date.now(),
       })
     } finally {
