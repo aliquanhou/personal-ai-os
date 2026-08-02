@@ -379,16 +379,22 @@ class MemoryManager:
 
     # ── Memory Context (for LLM injection) ──────────────
 
-    def get_memory_context(self, query: str = "", max_items: int = 10) -> str:
+    def get_memory_context(self, query: str = "", max_items: int = 10,
+                           context_mode: str = "normal") -> str:
         """Build a memory context string to inject into LLM prompts.
 
         This is the key method that gives the AI its "memory" — it assembles
         relevant profile info, recent decisions, knowledge, and experiences
         into a context block the LLM can use.
+
+        Sprint v1.1: context_mode controls what gets loaded:
+          - "normal":      full memory (identity + decisions + knowledge + experiences)
+          - "fresh_start": identity only (strip decisions + project knowledge)
+          - "audit":       full memory + extended history
         """
         parts = []
 
-        # User profile
+        # User profile (always included)
         profile = self.get_profile()
         if profile:
             parts.append(f"""## User Profile
@@ -397,7 +403,7 @@ Skill Level: {profile.get('skill_level', 'intermediate')}
 Tech Stack: {', '.join(profile.get('tech_stack', []))}
 Goals: {', '.join(profile.get('goals', []))}
 """)
-            # Sprint 1: Rich identity
+            # Rich identity
             if profile.get('long_term_vision'):
                 parts.append(f"**Long-term Vision**: {profile['long_term_vision']}\n")
             if profile.get('decision_principles'):
@@ -418,7 +424,7 @@ Goals: {', '.join(profile.get('goals', []))}
                 if hates:
                     parts.append(f"**Avoids**: {', '.join(hates)}\n")
 
-        # Sprint 1: User Goals with progress
+        # Sprint 1: User Goals
         goals = self.get_user_goals(status="active")
         if goals:
             parts.append("## 🎯 Active Goals")
@@ -427,33 +433,52 @@ Goals: {', '.join(profile.get('goals', []))}
                 parts.append(f"- [{g['category']}] {g['title']} {bar} {g['progress_pct']:.0f}%")
             parts.append("")
 
-        # Recent decisions
-        decisions = self.get_recent_decisions(limit=5)
-        if decisions:
-            parts.append("## Recent Decisions")
-            for d in decisions:
-                parts.append(f"- {d['context']} → Chose: {d['chosen']}")
-            parts.append("")
-
-        # Active tasks
-        active_tasks = self.get_tasks_by_state(["executing", "waiting_human", "verifying"], limit=5)
-        if active_tasks:
-            parts.append("## Active Tasks")
-            for t in active_tasks:
-                parts.append(f"- [{t['state']}] {t['title']}")
-            parts.append("")
-
-        # Relevant knowledge
-        if query:
-            knowledge = self.search_knowledge(query, limit=max_items)
+        # v1.1: Context mode filtering
+        if context_mode == "fresh_start":
+            # Strip recent decisions + knowledge — only identity
+            parts.append("## 🆕 重新开始模式\n请以全新的视角分析，不要依赖过去的项目决策。\n")
+        elif context_mode == "audit":
+            # Extended history
+            parts.append("## 📋 审计模式 — 加载完整历史\n")
+            decisions = self.get_recent_decisions(limit=20)
+            if decisions:
+                parts.append("## 全部最近决策")
+                for d in decisions:
+                    parts.append(f"- {d['context']} → Chose: {d['chosen']}")
+            knowledge = self.search_knowledge(query, limit=30) if query else []
             if knowledge:
-                parts.append("## Relevant Knowledge")
+                parts.append("\n## 相关知识库")
                 for k in knowledge:
                     parts.append(f"- [{k['category']}] {k['title']}: {k['content'][:300]}")
+        else:  # normal mode
+            # Recent decisions
+            decisions = self.get_recent_decisions(limit=5)
+            if decisions:
+                parts.append("## Recent Decisions")
+                for d in decisions:
+                    parts.append(f"- {d['context']} → Chose: {d['chosen']}")
                 parts.append("")
 
-        # Recent experiences
-        experiences = self.get_experiences(limit=5)
+            # Active tasks
+            active_tasks = self.get_tasks_by_state(["executing", "waiting_human", "verifying"], limit=5)
+            if active_tasks:
+                parts.append("## Active Tasks")
+                for t in active_tasks:
+                    parts.append(f"- [{t['state']}] {t['title']}")
+                parts.append("")
+
+            # Relevant knowledge
+            if query:
+                knowledge = self.search_knowledge(query, limit=max_items)
+                if knowledge:
+                    parts.append("## Relevant Knowledge")
+                    for k in knowledge:
+                        parts.append(f"- [{k['category']}] {k['title']}: {k['content'][:300]}")
+                    parts.append("")
+
+        # Recent experiences (always useful)
+        experiences_limit = 10 if context_mode == "audit" else 5
+        experiences = self.get_experiences(limit=experiences_limit)
         if experiences:
             parts.append("## Lessons Learned")
             for e in experiences:

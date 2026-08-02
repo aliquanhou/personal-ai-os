@@ -58,6 +58,8 @@ class AgentContext:
     resume_from_checkpoint: dict | None = None
     # Sprint 4: Inter-agent communication
     mailbox_context: str = ""  # Messages from teammates
+    # v1.1: Memory context isolation mode
+    context_mode: str = "normal"  # normal / fresh_start / audit
     handoff_context: dict | None = None  # Structured handoff from previous agent
 
 
@@ -458,8 +460,11 @@ class AgentRuntime:
         if not session_id:
             session_id = str(uuid.uuid4())[:8]
 
-        # Build context with memory
-        memory_ctx = agent.memory.get_memory_context(query=goal)
+        # v1.1: Detect user intent for memory context mode
+        context_mode = self._detect_context_mode(goal)
+        memory_ctx = agent.memory.get_memory_context(
+            query=goal, context_mode=context_mode
+        )
         workspace = get_workspace()
 
         # Auto-create project workspace if slug provided
@@ -478,6 +483,7 @@ class AgentRuntime:
             memory_context=memory_ctx,
             project_slug=project_slug,
             resume_from_checkpoint=resume_data,
+            context_mode=context_mode,
         )
 
         self._active_runs[agent.id] = ctx
@@ -485,6 +491,34 @@ class AgentRuntime:
             return await agent.run(ctx)
         finally:
             self._active_runs.pop(agent.id, None)
+
+
+    @staticmethod
+    def _detect_context_mode(goal: str) -> str:
+        """Detect user intent for memory context filtering.
+
+        v1.1: Parses goal text for keywords that signal context isolation intent.
+        - "重新设计" / "不要考虑之前" / "推倒重来" → fresh_start
+        - "审计" / "复盘" / "检查之前" → audit
+        - default → normal
+        """
+        gl = goal.lower()
+        fresh_keywords = [
+            "重新设计", "不要考虑之前", "不考虑之前", "从头开始",
+            "新方案", "推倒重来", "全新的", "忽略之前",
+            "重新想", "别管之前的", "清除上下文",
+        ]
+        audit_keywords = [
+            "审计之前", "复盘", "检查之前", "回顾历史",
+            "review past", "audit",
+        ]
+        for kw in fresh_keywords:
+            if kw.lower() in gl:
+                return "fresh_start"
+        for kw in audit_keywords:
+            if kw.lower() in gl:
+                return "audit"
+        return "normal"
 
 
 # Global singleton
