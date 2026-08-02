@@ -563,6 +563,8 @@ async def chat_stream(req: ChatRequest):
                         messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result.output if result.success else f"Error: {result.error or result.output}"})
                 else:
                     full_response = resp.get("content", "")
+                    if not full_response or not full_response.strip():
+                        full_response = "收到。请告诉我你的具体需求，我来执行。"
                     words = full_response.split(" ")
                     for i in range(0, len(words), 3):
                         chunk = " ".join(words[i:i+3])
@@ -581,7 +583,9 @@ async def chat_stream(req: ChatRequest):
                     yield f"data: {_json.dumps({'type': 'done', 'response': full_response, 'iterations': iteration, 'tool_calls': tool_log, 'progress': progress})}\n\n"
                     break
             else:
-                yield f"data: {_json.dumps({'type': 'done', 'response': full_response or 'Max iterations', 'iterations': iteration, 'tool_calls': tool_log})}\n\n"
+                if not full_response:
+                    full_response = "任务已处理完毕。"
+                yield f"data: {_json.dumps({'type': 'done', 'response': full_response, 'iterations': iteration, 'tool_calls': tool_log})}\n\n"
 
             if full_response:
                 memory.save_message(session_id, "assistant", full_response, {"agent": req.agent, "iterations": iteration, "tool_calls": tool_log})

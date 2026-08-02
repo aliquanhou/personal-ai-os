@@ -109,15 +109,35 @@ export default function ChatPanel() {
       }
     } catch (err: any) {
       setStreamTools([])
+      // Streaming failed — fall back to regular API
+      try {
+        const fallback = await (await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+        })).json()
+        fullResponse = fallback.response || ''
+        toolLog.push(...(fallback.tool_calls || []))
+        if (!sid) setSessionId(fallback.session_id)
+      } catch {
+        addMessage({
+          id: nextId(), role: 'system' as const,
+          content: `❌ ${err.message || '请求失败，请检查后端是否运行'}`,
+          timestamp: Date.now(),
+        })
+        return
+      }
+    }
+
+    // Add complete response
+    if (!fullResponse && toolLog.length === 0) {
       addMessage({
         id: nextId(), role: 'system' as const,
-        content: `❌ ${err.message || 'Stream error'}`,
+        content: 'Agent 未返回结果。请重试或使用更具体的指令。',
         timestamp: Date.now(),
       })
       return
     }
-
-    // Add complete response
     addMessage({
       id: nextId(), role: 'assistant' as const,
       content: fullResponse, toolCalls: toolLog,
