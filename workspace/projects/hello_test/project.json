@@ -1,0 +1,9 @@
+{
+  "name": "hello_test",
+  "slug": "hello_test",
+  "description": "创建一个新的测试项目 workspace/projects/hello_test。要求：1.创建目录 hello_test 2.创建 main.py（内容: def main(): print(\"Hello AI OS\"), 含 __name__==\"__main__\" 调用main()) 3.创建 README.md 4.运行 python main.py 验证输出必须是 Hello AI OS",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T18:11:20.874635+00:00",
+  "updated_at": "2026-08-02T18:11:20.874635+00:00"
+}

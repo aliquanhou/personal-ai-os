@@ -75,16 +75,23 @@ class ErrorRecoveryManager:
     """Controls error retry per-tool. Hard stops on repeated failures.
 
     Rules:
-      - environment errors: max 2 auto-retries
-      - code errors: max 2 auto-retries
+      - environment errors: max 5 auto-retries
+      - code errors: max 3 auto-retries
       - permission errors: 0 retries (fatal immediately)
-      - network errors: max 1 retry
-      - unknown errors: max 1 retry
-      - Same tool + same args called > 2 times consecutively → force FAILED
+      - network errors: max 2 retries
+      - unknown errors: max 2 retries
+      - Exploration commands (ls, pwd, cd, echo, cat) never count.
+      - Same tool + same args called > 3 times → infinite loop detection
     """
 
-    MAX_RETRIES_PER_TOOL = 2
-    MAX_SAME_CALLS = 2            # Same tool + same args > this → infinite loop detection
+    MAX_RETRIES_PER_TOOL = 5
+    MAX_SAME_CALLS = 3
+
+    # Commands that are harmless exploration — don't count against budget
+    EXPLORATION_PREFIXES = [
+        "ls ", "pwd", "cd ", "echo ", "cat ", "head ", "tail ",
+        "wc ", "which ", "where ", "find ", "grep ", "dir", "type ",
+    ]
 
     def __init__(self):
         self.errors: list[ErrorRecord] = []
@@ -129,14 +136,24 @@ class ErrorRecoveryManager:
 
         return ErrorCategory.UNKNOWN
 
-    def retry_allowed(self, tool_name: str, error_text: str) -> tuple[bool, str]:
-        """Returns (allowed_to_retry, reason).
+    def _is_exploration(self, tool_name: str, error_text: str, args_str: str = "") -> bool:
+        """Return True if this tool call is harmless exploration (ls, pwd, etc)."""
+        if tool_name != "shell":
+            return False
+        combined = (args_str or error_text or "").lower()
+        for prefix in self.EXPLORATION_PREFIXES:
+            if combined.startswith(prefix.lower()):
+                return True
+        return False
 
-        Considers:
-          1. Error category → retry budget
-          2. Consecutive same-tool-same-args → infinite loop detection
-        """
+    def retry_allowed(self, tool_name: str, error_text: str,
+                      args_str: str = "") -> tuple[bool, str]:
+        """Returns (allowed_to_retry, reason)."""
         category = self.classify(tool_name, error_text)
+
+        # Exploration commands never count — they're harmless info gathering
+        if self._is_exploration(tool_name, error_text, args_str):
+            return True, "探索命令，不计入重试预算"
 
         # Permission errors → never retry
         if category == ErrorCategory.PERMISSION:
@@ -146,11 +163,11 @@ class ErrorRecoveryManager:
         tool_errors = [e for e in self.errors if e.tool_name == tool_name and not e.recovered]
         retries_used = len(tool_errors)
 
-        budget = self.MAX_RETRIES_PER_TOOL  # default: 2
+        budget = self.MAX_RETRIES_PER_TOOL  # default: 5
         if category == ErrorCategory.PERMISSION:
             budget = 0
         elif category == ErrorCategory.NETWORK:
-            budget = 1
+            budget = 2
 
         if retries_used >= budget:
             return False, (
@@ -366,7 +383,8 @@ class TaskLifecycleController:
             if not error_text or len(error_text.strip()) == 0:
                 error_text = f"{tool_name} returned no output (可能的环境错误)"
 
-            can_retry, reason = self.error_manager.retry_allowed(tool_name, error_text)
+            args_str = str(args.get("command", "")) if args else ""
+            can_retry, reason = self.error_manager.retry_allowed(tool_name, error_text, args_str)
             self.tracker.observe(tool_name, False, error_text)
 
             if can_retry:
