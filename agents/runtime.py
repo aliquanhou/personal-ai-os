@@ -264,7 +264,9 @@ class BaseAgent(ABC):
 
                         # ── v1.3: Lifecycle records tool result → controls stop ──
                         vr = lc.record_tool_result(
-                            func_name, result.success, result.output or result.error or "", func_args
+                            func_name, result.success,
+                            (result.output or "") if result.success else (result.error or result.output or f"{func_name} failed"),
+                            func_args
                         )
 
                         # Emit lifecycle event for VERIFY/RECOVER/FAILED

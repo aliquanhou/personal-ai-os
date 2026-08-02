@@ -142,32 +142,38 @@ class ErrorRecoveryManager:
         if category == ErrorCategory.PERMISSION:
             return False, f"权限错误，不允许重试: {error_text[:100]}"
 
-        # Count retries for this tool
+        # Count retries for this tool (errors from THIS run, not history)
         tool_errors = [e for e in self.errors if e.tool_name == tool_name and not e.recovered]
         retries_used = len(tool_errors)
 
-        budget = self.MAX_RETRIES_PER_TOOL
-        if category in (ErrorCategory.NETWORK, ErrorCategory.UNKNOWN):
+        budget = self.MAX_RETRIES_PER_TOOL  # default: 2
+        if category == ErrorCategory.PERMISSION:
+            budget = 0
+        elif category == ErrorCategory.NETWORK:
             budget = 1
 
         if retries_used >= budget:
             return False, (
-                f"工具 '{tool_name}' 连续失败 {retries_used} 次（上限 {budget}），已停止。"
+                f"工具 '{tool_name}' 连续失败 {retries_used} 次（上限 {max(1,budget)}），已停止。"
                 f" 错误: {error_text[:150]}"
             )
 
-        # Infinite loop detection: same tool + same args > 2 consecutive times
-        self._tool_call_sequence.append({"tool": tool_name, "text": error_text[:80]})
-        if len(self._tool_call_sequence) >= 3:
-            last3 = self._tool_call_sequence[-3:]
-            all_same = (
-                last3[0]["tool"] == last3[1]["tool"] == last3[2]["tool"] and
-                last3[0]["text"][:40] == last3[1]["text"][:40] == last3[2]["text"][:40]
-            )
-            if all_same:
-                return False, (
-                    f"检测到死循环：'{tool_name}' 连续 3 次出现相同错误。已强制停止。"
+        # Infinite loop detection: same tool + same error text > 2 consecutive times
+        # Only triggers when error_text is non-empty (empty texts are indistinguishable)
+        if error_text and len(error_text.strip()) > 0:
+            self._tool_call_sequence.append({"tool": tool_name, "text": error_text[:80]})
+            if len(self._tool_call_sequence) >= 3:
+                last3 = self._tool_call_sequence[-3:]
+                all_have_text = all(len(e["text"].strip()) > 0 for e in last3)
+                all_same = (
+                    all_have_text and
+                    last3[0]["tool"] == last3[1]["tool"] == last3[2]["tool"] and
+                    last3[0]["text"][:40] == last3[1]["text"][:40] == last3[2]["text"][:40]
                 )
+                if all_same:
+                    return False, (
+                        f"检测到死循环：'{tool_name}' 连续 3 次出现相同错误。已强制停止。"
+                    )
 
         self.errors.append(ErrorRecord(
             tool_name=tool_name,
@@ -200,10 +206,17 @@ class ErrorRecoveryManager:
         # Permission errors are always fatal
         if any(e.category == ErrorCategory.PERMISSION for e in self.errors):
             return True
-        # Any tool failed more than budget times
+        # Any tool failed more than MAX_RETRIES (2) times
         for tool_name in set(e.tool_name for e in self.errors):
             failures = [e for e in self.errors if e.tool_name == tool_name and not e.recovered]
-            if len(failures) >= self.MAX_RETRIES_PER_TOOL:
+            if len(failures) > self.MAX_RETRIES_PER_TOOL:
+                return True
+        # Infinite loop detection check
+        if len(self._tool_call_sequence) >= 3:
+            last3 = self._tool_call_sequence[-3:]
+            if (last3[0]["tool"] == last3[1]["tool"] == last3[2]["tool"] and
+                len(last3[0]["text"]) > 0 and
+                last3[0]["text"][:40] == last3[1]["text"][:40] == last3[2]["text"][:40]):
                 return True
         return False
 
@@ -310,6 +323,11 @@ class TaskLifecycleController:
 
         Returns a dict with guidance on lifecycle state changes.
         """
+        # v1.3.1: Sanitize output — never pass None or empty str to error handlers
+        if output is None:
+            output = ""
+        error_text = output if not success else ""
+
         result: dict[str, Any] = {
             "lifecycle_stage": self.stage.value,
             "should_continue": True,
@@ -341,9 +359,12 @@ class TaskLifecycleController:
                 # VERIFY failed — stay in EXECUTE to retry
                 self.auto_progress_to(LifecycleStage.EXECUTE)
         else:
-            # Tool failed
-            can_retry, reason = self.error_manager.retry_allowed(tool_name, output)
-            self.tracker.observe(tool_name, False, output)
+            # Tool failed — ensure we have a meaningful error text
+            if not error_text or len(error_text.strip()) == 0:
+                error_text = f"{tool_name} returned no output (可能的环境错误)"
+
+            can_retry, reason = self.error_manager.retry_allowed(tool_name, error_text)
+            self.tracker.observe(tool_name, False, error_text)
 
             if can_retry:
                 self.auto_progress_to(LifecycleStage.RECOVER)
