@@ -36,6 +36,25 @@ from kernel.comm_bus import (
     TeamChannel,
     get_comm_bus,
 )
+# Sprint 5
+from kernel.reputation import (
+    AgentReputation,
+    ReputationRegistry,
+    get_reputation_registry,
+)
+from kernel.budget import (
+    BudgetManager,
+    BudgetStatus,
+    TokenUsage,
+    get_budget_manager,
+)
+from kernel.audit import (
+    AuditCategory,
+    AuditEntry,
+    AuditLog,
+    AuditSeverity,
+    get_audit_log,
+)
 
 __all__ = [
     "Config", "get_config", "set_config",
@@ -51,4 +70,9 @@ __all__ = [
     # Sprint 4
     "AgentMailbox", "AgentMessage", "CommunicationBus",
     "HandoffContext", "MessageType", "TeamChannel", "get_comm_bus",
+    # Sprint 5
+    "AgentReputation", "ReputationRegistry", "get_reputation_registry",
+    "BudgetManager", "BudgetStatus", "TokenUsage", "get_budget_manager",
+    "AuditCategory", "AuditEntry", "AuditLog", "AuditSeverity",
+    "get_audit_log",
 ]

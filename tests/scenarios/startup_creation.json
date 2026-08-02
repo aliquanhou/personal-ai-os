@@ -1,0 +1,22 @@
+{
+  "name": "startup_creation",
+  "description": "CEO plans and routes a startup creation workflow across the full agent team",
+  "goal": "创建一个AI客服系统创业计划",
+  "expected_agents": ["ceo", "project_manager", "research_agent", "coding_agent", "writing_agent", "reflection_agent"],
+  "expected_teams": ["product_dev", "full_team"],
+  "required_capabilities": ["orchestration", "project_planning", "research", "code_generation", "writing", "reflection"],
+  "expected_tasks": [
+    {"title": "市场调研", "agent": "research_agent", "capabilities": ["research", "analysis"], "dependencies": []},
+    {"title": "产品规划", "agent": "project_manager", "capabilities": ["project_planning", "strategy"], "dependencies": [0]},
+    {"title": "技术架构", "agent": "coding_agent", "capabilities": ["code_generation", "design"], "dependencies": [1]},
+    {"title": "编写文档", "agent": "writing_agent", "capabilities": ["writing"], "dependencies": [2]},
+    {"title": "项目复盘", "agent": "reflection_agent", "capabilities": ["reflection"], "dependencies": [3]}
+  ],
+  "budget_daily_limit": 5.00,
+  "budget_task_limit": 2.00,
+  "checks": [
+    {"type": "agent_has_capability", "name": "CEO可编排", "agent": "ceo", "capability": "orchestration"},
+    {"type": "agent_has_capability", "name": "Coder可写代码", "agent": "coding_agent", "capability": "code_generation"},
+    {"type": "graph_depth", "name": "任务图有依赖层级", "expected": 2}
+  ]
+}

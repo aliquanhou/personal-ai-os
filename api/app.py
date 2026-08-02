@@ -40,6 +40,10 @@ from kernel.registry import (
 from kernel.router import AgentRouter, RoutePlan, get_agent_router
 from kernel.comm_bus import get_comm_bus, CommunicationBus
 from kernel.workspace import get_workspace, WorkspaceManager
+# Sprint 5
+from kernel.audit import get_audit_log, AuditCategory, AuditSeverity
+from kernel.budget import get_budget_manager
+from kernel.reputation import get_reputation_registry
 from memory.manager import get_memory
 from tools.registry import get_tool_registry
 
@@ -852,6 +856,166 @@ async def get_channel_history(team_name: str, limit: int = 50):
     """Get recent messages from a team channel."""
     history = get_comm_bus().get_channel_history(team_name, limit)
     return {"team": team_name, "messages": history}
+
+
+# ── Sprint 5: Governance Routes ──────────────────────
+
+# Reputation
+@app.get("/api/gov/reputation")
+async def get_all_reputations():
+    """Get reputation scores for all agents."""
+    return {"agents": get_reputation_registry().get_all()}
+
+
+@app.get("/api/gov/reputation/{agent_name}")
+async def get_agent_reputation(agent_name: str):
+    """Get reputation for a specific agent."""
+    rep = get_reputation_registry().get(agent_name)
+    return rep.to_dict()
+
+
+@app.post("/api/gov/reputation/record")
+async def record_reputation(agent_name: str, success: bool,
+                            duration_ms: float, tool_calls: int = 0,
+                            capability: str = ""):
+    """Record a task result for reputation tracking."""
+    get_reputation_registry().record(agent_name, success, duration_ms,
+                                     tool_calls=tool_calls, capability=capability)
+    return {"status": "recorded"}
+
+
+@app.get("/api/gov/reputation/team/{team_name}")
+async def get_team_reputation(team_name: str):
+    """Get reputation health for a team."""
+    from kernel.registry import get_agent_registry
+    registry = get_agent_registry()
+    team = registry.get_team(team_name)
+    agent_names = [d.name for d in team]
+    return get_reputation_registry().get_team_health(agent_names)
+
+
+# Budget
+@app.get("/api/gov/budget")
+async def get_budget_status():
+    """Get current budget status."""
+    return get_budget_manager().get_status()
+
+
+@app.get("/api/gov/budget/agents")
+async def get_agent_costs():
+    """Get per-agent cost breakdown."""
+    return {"agents": get_budget_manager().get_agent_costs()}
+
+
+@app.get("/api/gov/budget/transactions")
+async def get_budget_transactions(limit: int = 50):
+    """Get recent budget transactions."""
+    return {"transactions": get_budget_manager().get_transactions(limit)}
+
+
+@app.post("/api/gov/budget/record")
+async def record_budget_usage(context_id: str, agent_name: str,
+                              input_tokens: int = 0, output_tokens: int = 0,
+                              model: str = ""):
+    """Record token usage for budget tracking."""
+    usage = get_budget_manager().record(context_id, agent_name, model,
+                                        input_tokens, output_tokens)
+    return {"status": "recorded", "cost_usd": usage.estimated_cost_usd}
+
+
+@app.post("/api/gov/budget/check")
+async def check_budget(context_id: str = "", estimated_input: int = 1000,
+                       estimated_output: int = 500):
+    """Check if budget allows an operation."""
+    return get_budget_manager().check(context_id, estimated_input, estimated_output)
+
+
+# Audit
+@app.get("/api/gov/audit")
+async def get_audit_entries(limit: int = 50, category: str = "",
+                            agent: str = ""):
+    """Get audit log entries, optionally filtered."""
+    audit = get_audit_log()
+    if agent:
+        return {"entries": audit.get_by_agent(agent, limit)}
+    elif category:
+        try:
+            cat = AuditCategory(category)
+            return {"entries": audit.get_by_category(cat, limit)}
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Unknown category: {category}")
+    return {"entries": audit.get_recent(limit)}
+
+
+@app.get("/api/gov/audit/decisions")
+async def get_audit_decisions(limit: int = 50):
+    """Get recent decisions from the audit log."""
+    return {"decisions": get_audit_log().get_decisions(limit)}
+
+
+@app.get("/api/gov/audit/search")
+async def search_audit(query: str, limit: int = 50):
+    """Search the audit log."""
+    return {"entries": get_audit_log().search(query, limit)}
+
+
+@app.get("/api/gov/audit/stats")
+async def get_audit_stats():
+    """Get audit statistics."""
+    return get_audit_log().stats()
+
+
+@app.post("/api/gov/audit")
+async def record_audit_entry(category: str, action: str, agent: str = "kernel",
+                             detail: str = "", rationale: str = "",
+                             session_id: str = "", task_id: str = ""):
+    """Record an audit entry manually."""
+    try:
+        cat = AuditCategory(category)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Unknown category: {category}")
+    audit_id = get_audit_log().record(cat, action, detail=detail, agent=agent,
+                                      rationale=rationale, session_id=session_id,
+                                      task_id=task_id)
+    return {"audit_id": audit_id, "status": "recorded"}
+
+
+# Scenario Tests
+@app.get("/api/gov/scenarios")
+async def list_scenarios():
+    """List available scenario tests."""
+    from pathlib import Path as _Path
+    import json as _json
+    scenarios_dir = (_Path(__file__).parent.parent / "tests" / "scenarios").resolve()
+    scenarios = []
+    for f in sorted(scenarios_dir.glob("*.json")):
+        if f.name.startswith("_"):
+            continue
+        try:
+            data = _json.loads(f.read_text(encoding="utf-8"))
+            scenarios.append({
+                "name": data.get("name", f.stem),
+                "description": data.get("description", ""),
+                "goal": data.get("goal", "")[:100],
+            })
+        except Exception:
+            pass
+    return {"scenarios": scenarios}
+
+
+@app.post("/api/gov/scenarios/run")
+async def run_scenario_test(name: str = ""):
+    """Run a scenario test (or all if name is empty)."""
+    from tests.scenarios.runner import ScenarioRunner
+    runner = ScenarioRunner()
+    if name:
+        scenario_path = str((Path(__file__).parent.parent / "tests" / "scenarios" / f"{name}.json").resolve())
+        if not Path(scenario_path).exists():
+            raise HTTPException(status_code=404, detail=f"Scenario not found: {name}")
+        result = runner.run_file(scenario_path)
+    else:
+        result = runner.run_all()
+    return result
 
 
 # ── Static Files (Studio) ──────────────────────────────

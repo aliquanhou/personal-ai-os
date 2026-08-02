@@ -13,6 +13,8 @@ venv/
 
 # Data
 data/*.db
+data/*.jsonl
+data/*.json
 memory_data/
 sqlite+aiodata/
 

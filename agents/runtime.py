@@ -32,6 +32,9 @@ from typing import Any, AsyncIterator, Optional
 from kernel.events import Event, EventType, get_event_bus
 from kernel.llm_router import LLMRouter, get_llm_router
 from kernel.workspace import WorkspaceManager, get_workspace
+# Sprint 5
+from kernel.audit import get_audit_log, AuditCategory, AuditSeverity
+from kernel.reputation import get_reputation_registry
 from memory.manager import MemoryManager, get_memory
 from tools.registry import ToolRegistry, get_tool_registry
 
@@ -213,6 +216,20 @@ class BaseAgent(ABC):
                             continue
 
                         result = await self.tools.execute(tool_name=func_name, **func_args)
+
+                        # Sprint 5: Audit every tool execution
+                        try:
+                            audit = get_audit_log()
+                            if result.success:
+                                audit.record_action(self.name, f"Tool: {func_name}",
+                                                   result.output[:200], tool_name=func_name,
+                                                   session_id=ctx.session_id)
+                            else:
+                                audit.record_error(self.name, f"Tool failed: {func_name}",
+                                                  result.output[:200] if result.output else result.error)
+                        except Exception:
+                            pass
+
                         tool_calls_log.append({
                             "tool": func_name,
                             "args": func_args,
@@ -285,15 +302,38 @@ class BaseAgent(ABC):
                 data={"agent_id": self.id, "error": str(e)},
                 source=self.name,
             ))
+            # Sprint 5: Record failure reputation + audit error
+            err_duration = (time.time() - start_time) * 1000
+            try:
+                audit = get_audit_log()
+                audit.record_error(self.name, str(e), detail=f"Agent {self.name} crashed",
+                                  context={"goal": ctx.goal[:200], "iteration": ctx.current_iteration})
+                get_reputation_registry().record(self.name, False, err_duration,
+                                                 tool_calls=len(tool_calls_log))
+            except Exception:
+                pass
+
             return AgentResult(
                 success=False,
                 error=str(e),
                 tool_calls=tool_calls_log,
                 iterations=ctx.current_iteration,
-                duration_ms=(time.time() - start_time) * 1000,
+                duration_ms=err_duration,
                 checkpoint_count=checkpoint_count,
                 last_checkpoint=last_checkpoint,
             )
+
+        duration = (time.time() - start_time) * 1000
+
+        # Sprint 5: Record reputation
+        try:
+            rep = get_reputation_registry()
+            hit_max = ctx.current_iteration >= ctx.max_iterations
+            rep.record(self.name, True, duration,
+                      tool_calls=len(tool_calls_log),
+                      hit_max_iterations=hit_max)
+        except Exception:
+            pass
 
         return AgentResult(
             success=True,
@@ -301,7 +341,7 @@ class BaseAgent(ABC):
             tool_calls=tool_calls_log,
             iterations=ctx.current_iteration,
             memory_updates=memory_updates,
-            duration_ms=(time.time() - start_time) * 1000,
+            duration_ms=duration,
             checkpoint_count=checkpoint_count,
             last_checkpoint=last_checkpoint,
         )
