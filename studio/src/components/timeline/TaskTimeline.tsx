@@ -202,19 +202,32 @@ export default function TaskTimeline() {
   )
 }
 
+const STAGE_LABELS: Record<string, { label: string; color: string }> = {
+  INIT: { label: '初始化', color: 'text-gray-400' },
+  PLAN: { label: '规划', color: 'text-yellow-400' },
+  EXECUTE: { label: '执行', color: 'text-blue-400' },
+  RECOVER: { label: '恢复', color: 'text-orange-400' },
+  VERIFY: { label: '验证', color: 'text-purple-400' },
+  COMPLETE: { label: '完成', color: 'text-green-400' },
+}
+
 function buildStep(id: number, evt: LiveEvent): TimelineStep {
   const t = evt.type
   const time = new Date(evt.timestamp * 1000).toLocaleTimeString()
+  const stage = evt.data?.lifecycle_stage || ''
+  const stageInfo = STAGE_LABELS[stage]
+  const stageTag = stageInfo ? ` [${stageInfo.label}]` : ''
 
   if (t === 'agent:started') {
-    return { id, type: t, source: evt.source, label: `${evt.source} 启动`, detail: (evt.data.goal || '').slice(0, 120), status: 'done', time }
+    const goals = evt.data?.goal_count ? ` · ${evt.data.goal_count} 个子目标` : ''
+    return { id, type: t, source: evt.source, label: `${evt.source} 启动${stageTag}${goals}`, detail: (evt.data.goal || '').slice(0, 120), status: 'done', time }
   }
   if (t === 'agent:thinking') {
-    return { id, type: t, source: evt.source, label: `${evt.source} 思考中`, detail: `iteration ${evt.data.iteration}`, status: 'running', time }
+    return { id, type: t, source: evt.source, label: `${evt.source} 思考${stageTag}`, detail: `iteration ${evt.data.iteration}`, status: 'running', time }
   }
   if (t === 'tool:call:start') {
     const tool = evt.data.tool || ''
-    return { id, type: t, source: evt.source, label: TOOL_LABELS[tool] || tool, detail: evt.args ? JSON.stringify(evt.args).slice(0, 120) : '', status: 'running', time }
+    return { id, type: t, source: evt.source, label: (TOOL_LABELS[tool] || tool) + stageTag, detail: evt.args ? JSON.stringify(evt.args).slice(0, 120) : '', status: 'running', time }
   }
   if (t === 'tool:call:end') {
     const tool = evt.data.tool || ''
@@ -222,12 +235,16 @@ function buildStep(id: number, evt: LiveEvent): TimelineStep {
     return { id, type: t, source: evt.source, label: (TOOL_LABELS[tool] || tool) + (ok ? ' ✓' : ' ✗'), detail: '', status: ok ? 'done' : 'error', time }
   }
   if (t === 'agent:completed') {
-    return { id, type: t, source: evt.source, label: `${evt.source} 完成`, detail: `${evt.data.output_length || 0} chars`, status: 'done', time }
+    const gp = evt.data?.goal_progress
+    const progress = gp ? ` · ${gp.fulfilled}/${gp.items} 目标完成` : ''
+    return { id, type: t, source: evt.source, label: `${evt.source} 完成${stageTag}${progress}`, detail: `${evt.data.output_length || 0} chars`, status: 'done', time }
   }
   if (t === 'agent:error') {
-    return { id, type: t, source: evt.source, label: `${evt.source} 错误`, detail: evt.data.error || '', status: 'error', time }
+    const cls = evt.data?.classification || ''
+    const recoverable = cls === 'retry' ? ' (自动重试)' : cls === 'fatal' ? ' (已停止)' : ''
+    return { id, type: t, source: evt.source, label: `${evt.source} 错误${stageTag}${recoverable}`, detail: (evt.data.error || '').slice(0, 150), status: cls === 'fatal' ? 'error' : 'running', time }
   }
-  return { id, type: t, source: evt.source, label: t, detail: '', status: 'running', time }
+  return { id, type: t, source: evt.source, label: t + stageTag, detail: '', status: 'running', time }
 }
 
 function pickIcon(step: TimelineStep): typeof Wrench {

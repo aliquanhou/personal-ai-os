@@ -1,0 +1,141 @@
+=== 执行任务: 每日订单核对 (order_check) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_orders': 52, 'total_amount': 122038.37, 'duplicates': 2, 'anomaly_count': 5}
+  异常: 5 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\每日订单核对_2026-08-03_20260803_005145.txt
+    [warning] invalid_platform | ORD0004: 无效平台: 'unknown'
+    [warning] invalid_status | ORD0008: 无效状态: 'cancelled'
+    [critical] negative_amount | ORD0011: 异常金额: -99.5
+    [warning] duplicate_order | ORD0001: 重复订单: ORD0001
+    [warning] duplicate_order | ORD0002: 重复订单: ORD0002
+=== 执行任务: 库存对账 (stock_reconcile) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_skus': 40, 'diff_count': 40, 'negative_count': 1, 'anomaly_count': 41}
+  异常: 41 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\库存对账_2026-08-03_20260803_005145.txt
+    [warning] stock_diff | SKU0001: 库存差异 -69.0 (系统 90.0 vs 仓库 159.0)
+    [warning] stock_diff | SKU0002: 库存差异 87.0 (系统 195.0 vs 仓库 108.0)
+    [warning] stock_diff | SKU0003: 库存差异 37.0 (系统 139.0 vs 仓库 102.0)
+    [warning] stock_diff | SKU0004: 库存差异 119.0 (系统 139.0 vs 仓库 20.0)
+    [warning] stock_diff | SKU0005: 库存差异 -68.0 (系统 85.0 vs 仓库 153.0)
+=== 执行任务: 商品资料清洗 (product_clean) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_products': 30, 'cleaned_count': 30, 'negative_margin': 3, 'anomaly_count': 3}
+  异常: 3 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\商品资料清洗_2026-08-03_20260803_005145.txt
+    [warning] missing_name | PRD0005: 商品名称为空
+    [critical] negative_cost | PRD0010: 成本为负: -5.0
+    [critical] invalid_price | PRD0016: 售价无效: 0.0
+=== 执行任务: 每日订单核对 (order_check) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_orders': 52, 'total_amount': 122038.37, 'duplicates': 2, 'anomaly_count': 5}
+  异常: 5 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\每日订单核对_2026-08-03_20260803_005145.txt
+    [warning] invalid_platform | ORD0004: 无效平台: 'unknown'
+    [warning] invalid_status | ORD0008: 无效状态: 'cancelled'
+    [critical] negative_amount | ORD0011: 异常金额: -99.5
+    [warning] duplicate_order | ORD0001: 重复订单: ORD0001
+    [warning] duplicate_order | ORD0002: 重复订单: ORD0002
+=== 执行任务: 库存对账 (stock_reconcile) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_skus': 40, 'diff_count': 40, 'negative_count': 1, 'anomaly_count': 41}
+  异常: 41 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\库存对账_2026-08-03_20260803_005145.txt
+    [warning] stock_diff | SKU0001: 库存差异 -69.0 (系统 90.0 vs 仓库 159.0)
+    [warning] stock_diff | SKU0002: 库存差异 87.0 (系统 195.0 vs 仓库 108.0)
+    [warning] stock_diff | SKU0003: 库存差异 37.0 (系统 139.0 vs 仓库 102.0)
+    [warning] stock_diff | SKU0004: 库存差异 119.0 (系统 139.0 vs 仓库 20.0)
+    [warning] stock_diff | SKU0005: 库存差异 -68.0 (系统 85.0 vs 仓库 153.0)
+=== 执行任务: 商品资料清洗 (product_clean) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_products': 30, 'cleaned_count': 30, 'negative_margin': 3, 'anomaly_count': 3}
+  异常: 3 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\商品资料清洗_2026-08-03_20260803_005145.txt
+    [warning] missing_name | PRD0005: 商品名称为空
+    [critical] negative_cost | PRD0010: 成本为负: -5.0
+    [critical] invalid_price | PRD0016: 售价无效: 0.0
+=== 执行任务: 每日订单核对 (order_check) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_orders': 52, 'total_amount': 122038.37, 'duplicates': 2, 'anomaly_count': 5}
+  异常: 5 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\每日订单核对_2026-08-03_20260803_005145.txt
+    [warning] invalid_platform | ORD0004: 无效平台: 'unknown'
+    [warning] invalid_status | ORD0008: 无效状态: 'cancelled'
+    [critical] negative_amount | ORD0011: 异常金额: -99.5
+    [warning] duplicate_order | ORD0001: 重复订单: ORD0001
+    [warning] duplicate_order | ORD0002: 重复订单: ORD0002
+=== 执行任务: 库存对账 (stock_reconcile) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_skus': 40, 'diff_count': 40, 'negative_count': 1, 'anomaly_count': 41}
+  异常: 41 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\库存对账_2026-08-03_20260803_005145.txt
+    [warning] stock_diff | SKU0001: 库存差异 -69.0 (系统 90.0 vs 仓库 159.0)
+    [warning] stock_diff | SKU0002: 库存差异 87.0 (系统 195.0 vs 仓库 108.0)
+    [warning] stock_diff | SKU0003: 库存差异 37.0 (系统 139.0 vs 仓库 102.0)
+    [warning] stock_diff | SKU0004: 库存差异 119.0 (系统 139.0 vs 仓库 20.0)
+    [warning] stock_diff | SKU0005: 库存差异 -68.0 (系统 85.0 vs 仓库 153.0)
+=== 执行任务: 商品资料清洗 (product_clean) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_products': 30, 'cleaned_count': 30, 'negative_margin': 3, 'anomaly_count': 3}
+  异常: 3 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\商品资料清洗_2026-08-03_20260803_005145.txt
+    [warning] missing_name | PRD0005: 商品名称为空
+    [critical] negative_cost | PRD0010: 成本为负: -5.0
+    [critical] invalid_price | PRD0016: 售价无效: 0.0
+=== 执行任务: 每日订单核对 (order_check) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_orders': 52, 'total_amount': 122038.37, 'duplicates': 2, 'anomaly_count': 5}
+  异常: 5 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\每日订单核对_2026-08-03_20260803_005145.txt
+    [warning] invalid_platform | ORD0004: 无效平台: 'unknown'
+    [warning] invalid_status | ORD0008: 无效状态: 'cancelled'
+    [critical] negative_amount | ORD0011: 异常金额: -99.5
+    [warning] duplicate_order | ORD0001: 重复订单: ORD0001
+    [warning] duplicate_order | ORD0002: 重复订单: ORD0002
+=== 执行任务: 库存对账 (stock_reconcile) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_skus': 40, 'diff_count': 40, 'negative_count': 1, 'anomaly_count': 41}
+  异常: 41 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\库存对账_2026-08-03_20260803_005145.txt
+    [warning] stock_diff | SKU0001: 库存差异 -69.0 (系统 90.0 vs 仓库 159.0)
+    [warning] stock_diff | SKU0002: 库存差异 87.0 (系统 195.0 vs 仓库 108.0)
+    [warning] stock_diff | SKU0003: 库存差异 37.0 (系统 139.0 vs 仓库 102.0)
+    [warning] stock_diff | SKU0004: 库存差异 119.0 (系统 139.0 vs 仓库 20.0)
+    [warning] stock_diff | SKU0005: 库存差异 -68.0 (系统 85.0 vs 仓库 153.0)
+=== 执行任务: 商品资料清洗 (product_clean) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_products': 30, 'cleaned_count': 30, 'negative_margin': 3, 'anomaly_count': 3}
+  异常: 3 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\商品资料清洗_2026-08-03_20260803_005145.txt
+    [warning] missing_name | PRD0005: 商品名称为空
+    [critical] negative_cost | PRD0010: 成本为负: -5.0
+    [critical] invalid_price | PRD0016: 售价无效: 0.0
+=== 执行任务: 每日订单核对 (order_check) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_orders': 52, 'total_amount': 122038.37, 'duplicates': 2, 'anomaly_count': 5}
+  异常: 5 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\每日订单核对_2026-08-03_20260803_005145.txt
+    [warning] invalid_platform | ORD0004: 无效平台: 'unknown'
+    [warning] invalid_status | ORD0008: 无效状态: 'cancelled'
+    [critical] negative_amount | ORD0011: 异常金额: -99.5
+    [warning] duplicate_order | ORD0001: 重复订单: ORD0001
+    [warning] duplicate_order | ORD0002: 重复订单: ORD0002
+=== 执行任务: 库存对账 (stock_reconcile) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_skus': 40, 'diff_count': 40, 'negative_count': 1, 'anomaly_count': 41}
+  异常: 41 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\库存对账_2026-08-03_20260803_005145.txt
+    [warning] stock_diff | SKU0001: 库存差异 -69.0 (系统 90.0 vs 仓库 159.0)
+    [warning] stock_diff | SKU0002: 库存差异 87.0 (系统 195.0 vs 仓库 108.0)
+    [warning] stock_diff | SKU0003: 库存差异 37.0 (系统 139.0 vs 仓库 102.0)
+    [warning] stock_diff | SKU0004: 库存差异 119.0 (系统 139.0 vs 仓库 20.0)
+    [warning] stock_diff | SKU0005: 库存差异 -68.0 (系统 85.0 vs 仓库 153.0)
+=== 执行任务: 商品资料清洗 (product_clean) ===
+  状态: success | 数据日期: 2026-08-03
+  统计: {'total_products': 30, 'cleaned_count': 30, 'negative_margin': 3, 'anomaly_count': 3}
+  异常: 3 条 | 耗时: 0.0s
+  日报: D:\claude\personal-ai-os\workspace\projects\ecommerce-ops-v2\outputs\reports\商品资料清洗_2026-08-03_20260803_005145.txt
+    [warning] missing_name | PRD0005: 商品名称为空
+    [critical] negative_cost | PRD0010: 成本为负: -5.0
+    [critical] invalid_price | PRD0016: 售价无效: 0.0
+RUN-ALL OK

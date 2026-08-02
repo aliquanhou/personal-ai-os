@@ -1,0 +1,18 @@
+==================================================
+电商运营数字员工 - 日报
+==================================================
+任务: 每日订单核对
+数据日期: 2026-08-03
+生成时间: 2026-08-03 00:51:45
+--------------------------------------------------
+  total_orders: 52
+  total_amount: 122038.37
+  duplicates: 2
+  anomaly_count: 5
+--------------------------------------------------
+异常明细 (5 条):
+  [warning] invalid_platform | ORD0004: 无效平台: 'unknown'
+  [warning] invalid_status | ORD0008: 无效状态: 'cancelled'
+  [critical] negative_amount | ORD0011: 异常金额: -99.5
+  [warning] duplicate_order | ORD0001: 重复订单: ORD0001
+  [warning] duplicate_order | ORD0002: 重复订单: ORD0002

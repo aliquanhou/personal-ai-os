@@ -52,6 +52,8 @@ class AgentContext:
     memory_context: str = ""
     max_iterations: int = 30
     current_iteration: int = 0
+    # v1.2: Goal tracking
+    goal_tracker: Any = None  # GoalTracker instance (lazy import to avoid circular)
     # Sprint 2: Workspace & checkpoint
     project_slug: str = ""
     checkpoints: list[dict] = field(default_factory=list)
@@ -111,14 +113,24 @@ class BaseAgent(ABC):
         """
         start_time = time.time()
         tool_calls_log = []
+        consecutive_failures = 0  # v1.2: error recovery tracking
+
+        # v1.2: GoalTracker — detects task completion for early exit
+        from kernel.goal_tracker import GoalTracker, ErrorClassifier
+        tracker = GoalTracker(ctx.goal)
+        if tracker.items:
+            ctx.goal_tracker = tracker
+            logger.info("GoalTracker: %d goals extracted from request", len(tracker.items))
         memory_updates = 0
         checkpoint_count = 0
         last_checkpoint = None
 
+        # v1.2: Lifecycle — INIT
         await self.event_bus.publish(Event(
             type=EventType.AGENT_STARTED,
             data={"agent_id": self.id, "agent_name": self.name,
-                  "goal": ctx.goal[:200], "session_id": ctx.session_id},
+                  "goal": ctx.goal[:200], "session_id": ctx.session_id,
+                  "lifecycle_stage": "INIT", "goal_count": len(tracker.items)},
             source=self.name,
         ))
 
@@ -168,10 +180,11 @@ class BaseAgent(ABC):
             while ctx.current_iteration < ctx.max_iterations:
                 ctx.current_iteration += 1
 
+                stage = "PLAN" if ctx.current_iteration <= 3 else "EXECUTE"
                 await self.event_bus.publish(Event(
                     type=EventType.AGENT_THINKING,
                     data={"agent_id": self.id, "iteration": ctx.current_iteration,
-                      "session_id": ctx.session_id},
+                      "session_id": ctx.session_id, "lifecycle_stage": stage},
                     source=self.name,
                 ))
 
@@ -252,6 +265,31 @@ class BaseAgent(ABC):
                             "output": result.output[:500],
                         })
 
+                        # v1.2: GoalTracker observe
+                        if tracker.items:
+                            tracker.observe(func_name, result.success, result.output)
+
+                        # v1.2: Error recovery classification
+                        if not result.success:
+                            consecutive_failures += 1
+                            classification = ErrorClassifier.classify(
+                                func_name, result.error or result.output, consecutive_failures
+                            )
+                            await self.event_bus.publish(Event(
+                                type=EventType.AGENT_ERROR,
+                                data={"agent_id": self.id, "tool": func_name,
+                                      "error": result.error or result.output[:200],
+                                      "classification": classification,
+                                      "consecutive_failures": consecutive_failures,
+                                      "session_id": ctx.session_id},
+                                source=self.name,
+                            ))
+                            if classification == "fatal":
+                                final_output = f"（执行失败：{func_name} 连续失败 {consecutive_failures} 次，已停止。请检查错误日志。）"
+                                break  # exit the tool loop
+                        else:
+                            consecutive_failures = 0  # reset on success
+
                         # Sprint 2: Save checkpoint every 3 tool calls
                         if len(tool_calls_log) % 3 == 0:
                             last_checkpoint = self._save_checkpoint(
@@ -275,11 +313,36 @@ class BaseAgent(ABC):
                     final_output = response.get("content", "")
                     messages.append({"role": "assistant", "content": final_output})
 
+                    # v1.2: GoalTracker — check if all sub-goals are fulfilled
+                    if tracker.items:
+                        progress = tracker.progress()
+                        if tracker.all_fulfilled():
+                            final_output += (
+                                f"\n\n✅ 目标达成：{progress['fulfilled']}/{progress['items']} "
+                                f"项要求已满足。"
+                            )
+                        else:
+                            remaining_list = "、".join(
+                                r.text[:40] for r in tracker.remaining()[:5]
+                            )
+                            final_output += (
+                                f"\n\n⚠️ 进度：{progress['fulfilled']}/{progress['items']} "
+                                f"已完成。待完成：{remaining_list}"
+                            )
+                        logger.info(
+                            "GoalTracker exit: %d/%d fulfilled",
+                            progress["fulfilled"], progress["items"],
+                        )
+
                     # Auto-save to memory if substantive
                     if len(final_output) > 100:
                         self.memory.save_message(
                             ctx.session_id, "assistant", final_output,
-                            {"agent": self.name, "iterations": ctx.current_iteration},
+                            {
+                                "agent": self.name,
+                                "iterations": ctx.current_iteration,
+                                "goal_progress": tracker.progress() if tracker.items else None,
+                            },
                         )
                         memory_updates += 1
 
@@ -291,7 +354,13 @@ class BaseAgent(ABC):
 
                     await self.event_bus.publish(Event(
                         type=EventType.AGENT_COMPLETED,
-                        data={"agent_id": self.id, "output_length": len(final_output)},
+                        data={
+                            "agent_id": self.id,
+                            "output_length": len(final_output),
+                            "goal_progress": tracker.progress() if tracker.items else None,
+                            "session_id": ctx.session_id,
+                            "lifecycle_stage": "COMPLETE",
+                        },
                         source=self.name,
                     ))
                     break
