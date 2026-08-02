@@ -527,8 +527,8 @@ async def chat_stream(req: ChatRequest):
                     for tc in resp["tool_calls"]:
                         fn = tc["function"]["name"]
                         try:
-                            fa = json.loads(tc["function"]["arguments"])
-                        except json.JSONDecodeError:
+                            fa = _json.loads(tc["function"]["arguments"])
+                        except _json.JSONDecodeError:
                             fa = {}
 
                         yield f"data: {_json.dumps({'type': 'tool_start', 'tool': fn, 'args': {k: str(v)[:200] for k, v in fa.items()}})}\n\n"
