@@ -106,33 +106,30 @@ class BaseAgent(ABC):
         ...
 
     async def run(self, ctx: AgentContext) -> AgentResult:
-        """Run the agent loop: think → act → observe → checkpoint → repeat.
+        """Run the agent loop — Runtime v1.3 lifecycle-controlled.
 
-        Sprint 2: Auto-saves checkpoints at each major step.
-        If resuming, picks up from last checkpoint context.
+        LLM proposes actions. The TaskLifecycleController decides when to stop.
+        Previous 'while iteration < max' has been replaced with
+        'while lifecycle.can_continue()' — now Runtime owns the stop decision.
         """
         start_time = time.time()
         tool_calls_log = []
-        consecutive_failures = 0  # v1.2: error recovery tracking
-
-        # v1.2: GoalTracker — detects task completion for early exit
-        from kernel.goal_tracker import GoalTracker, ErrorClassifier
-        tracker = GoalTracker(ctx.goal)
-        if tracker.items:
-            ctx.goal_tracker = tracker
-            logger.info("GoalTracker: %d goals extracted from request", len(tracker.items))
         memory_updates = 0
         checkpoint_count = 0
         last_checkpoint = None
 
-        # v1.2: Lifecycle — INIT
-        await self.event_bus.publish(Event(
-            type=EventType.AGENT_STARTED,
-            data={"agent_id": self.id, "agent_name": self.name,
-                  "goal": ctx.goal[:200], "session_id": ctx.session_id,
-                  "lifecycle_stage": "INIT", "goal_count": len(tracker.items)},
-            source=self.name,
-        ))
+        # ── v1.3: Lifecycle Controller replaces GoalTracker + ErrorClassifier ──
+        from kernel.lifecycle import (
+            TaskLifecycleController, LifecycleStage, ErrorCategory
+        )
+        lc = TaskLifecycleController(ctx.goal, max_iterations=ctx.max_iterations)
+        if lc.tracker.items:
+            ctx.goal_tracker = lc.tracker
+            logger.info("LifecycleController: %d goals, INIT stage", len(lc.tracker.items))
+
+        # INIT → PLAN
+        lc.transition(LifecycleStage.PLAN)
+        await self._emit_lifecycle(lc, ctx.goal, ctx.session_id)
 
         # Sprint 6.5: Build system prompt with skill injection
         base_prompt = self.system_prompt(ctx)
@@ -177,16 +174,19 @@ class BaseAgent(ABC):
         final_output = ""
 
         try:
-            while ctx.current_iteration < ctx.max_iterations:
-                ctx.current_iteration += 1
+            # ── v1.3 Main Loop: Lifecycle-controlled ──
+            while lc.can_continue():
+                lc.advance_iteration()
+                ctx.current_iteration = lc.current_iteration
 
-                stage = "PLAN" if ctx.current_iteration <= 3 else "EXECUTE"
-                await self.event_bus.publish(Event(
-                    type=EventType.AGENT_THINKING,
-                    data={"agent_id": self.id, "iteration": ctx.current_iteration,
-                      "session_id": ctx.session_id, "lifecycle_stage": stage},
-                    source=self.name,
-                ))
+                # Throttle at max_iterations hard limit (backstop)
+                if lc.current_iteration > lc.max_iterations:
+                    final_output = f"（达到最大迭代次数 {lc.max_iterations}，任务中断）"
+                    lc.auto_progress_to(LifecycleStage.FAILED)
+                    break
+
+                # Emit lifecycle-aware thinking event
+                await self._emit_lifecycle(lc, f"Iter {lc.current_iteration}", ctx.session_id)
 
                 tool_defs = self.tools.list_definitions()
                 response = await self.llm.chat(messages, tools=tool_defs)
@@ -198,6 +198,8 @@ class BaseAgent(ABC):
                         "tool_calls": response["tool_calls"],
                     })
 
+                    should_exit = False  # v1.3: exit flag for fatal/recovery-stop
+
                     for tc in response["tool_calls"]:
                         func_name = tc["function"]["name"]
                         try:
@@ -208,44 +210,41 @@ class BaseAgent(ABC):
                         await self.event_bus.publish(Event(
                             type=EventType.TOOL_CALL_START,
                             data={"agent_id": self.id, "tool": func_name, "args": func_args,
-                                  "session_id": ctx.session_id},
+                                  "session_id": ctx.session_id,
+                                  "lifecycle_stage": lc.stage.value},
                             source=self.name,
                         ))
 
-                        # Sprint 2: Check approval layer
+                        # Approval check (unchanged)
                         approval_result = self.tools.check_approval(func_name, func_args)
                         if approval_result.blocked:
                             tool_calls_log.append({
-                                "tool": func_name,
-                                "args": func_args,
+                                "tool": func_name, "args": func_args,
                                 "success": False,
                                 "output": f"🚫 被批准层阻止: {approval_result.reason}",
                             })
                             messages.append({
-                                "role": "tool",
-                                "tool_call_id": tc["id"],
+                                "role": "tool", "tool_call_id": tc["id"],
                                 "content": f"Action blocked by approval layer: {approval_result.reason}",
                             })
                             continue
                         if approval_result.needs_approval:
                             tool_calls_log.append({
-                                "tool": func_name,
-                                "args": func_args,
+                                "tool": func_name, "args": func_args,
                                 "success": False,
                                 "output": f"⏸️ 等待人工批准: {approval_result.reason}",
                             })
                             messages.append({
-                                "role": "tool",
-                                "tool_call_id": tc["id"],
-                                "content": f"Action requires human approval: {approval_result.reason}. Ask the user before proceeding.",
+                                "role": "tool", "tool_call_id": tc["id"],
+                                "content": f"Action requires human approval: {approval_result.reason}.",
                             })
-                            # Save checkpoint before waiting
                             self._save_checkpoint(ctx, tool_calls_log, checkpoint_count, "waiting_approval")
                             continue
 
+                        # ── Execute tool ──
                         result = await self.tools.execute(tool_name=func_name, **func_args)
 
-                        # Sprint 5: Audit every tool execution
+                        # Audit
                         try:
                             audit = get_audit_log()
                             if result.success:
@@ -259,121 +258,125 @@ class BaseAgent(ABC):
                             pass
 
                         tool_calls_log.append({
-                            "tool": func_name,
-                            "args": func_args,
-                            "success": result.success,
-                            "output": result.output[:500],
+                            "tool": func_name, "args": func_args,
+                            "success": result.success, "output": result.output[:500],
                         })
 
-                        # v1.2: GoalTracker observe
-                        if tracker.items:
-                            tracker.observe(func_name, result.success, result.output)
+                        # ── v1.3: Lifecycle records tool result → controls stop ──
+                        vr = lc.record_tool_result(
+                            func_name, result.success, result.output or result.error or "", func_args
+                        )
 
-                        # v1.2: Error recovery classification
+                        # Emit lifecycle event for VERIFY/RECOVER/FAILED
+                        await self._emit_lifecycle(lc, func_name, ctx.session_id, extra={
+                            "verify_result": vr.get("verify_result"),
+                            "recovery_message": vr.get("recovery_message", ""),
+                        })
+
+                        # If tool failed, give the LLM a sanitized recovery message
                         if not result.success:
-                            consecutive_failures += 1
-                            classification = ErrorClassifier.classify(
-                                func_name, result.error or result.output, consecutive_failures
-                            )
-                            await self.event_bus.publish(Event(
-                                type=EventType.AGENT_ERROR,
-                                data={"agent_id": self.id, "tool": func_name,
-                                      "error": result.error or result.output[:200],
-                                      "classification": classification,
-                                      "consecutive_failures": consecutive_failures,
-                                      "session_id": ctx.session_id},
-                                source=self.name,
-                            ))
-                            if classification == "fatal":
-                                final_output = f"（执行失败：{func_name} 连续失败 {consecutive_failures} 次，已停止。请检查错误日志。）"
-                                break  # exit the tool loop
+                            recovery = vr.get("recovery_message", "")
+                            if recovery and "已停止" in recovery:
+                                # Fatal — stop completely
+                                final_output = f"（任务中断：{recovery}）"
+                                # break out of for loop
+                                should_exit = True
+                            elif recovery:
+                                # Filtered error to LLM
+                                messages.append({
+                                    "role": "tool", "tool_call_id": tc["id"],
+                                    "content": recovery,
+                                })
+                            else:
+                                messages.append({
+                                    "role": "tool", "tool_call_id": tc["id"],
+                                    "content": result.output if result.success else f"Error: {result.error}",
+                                })
                         else:
-                            consecutive_failures = 0  # reset on success
+                            messages.append({
+                                "role": "tool", "tool_call_id": tc["id"],
+                                "content": result.output,
+                            })
 
-                        # Sprint 2: Save checkpoint every 3 tool calls
+                        # Check if lifecycle says stop
+                        if not vr.get("should_continue", True):
+                            lc.auto_progress_to(LifecycleStage.FAILED)
+                            should_exit = True
+
+                        # Save checkpoint
                         if len(tool_calls_log) % 3 == 0:
                             last_checkpoint = self._save_checkpoint(
                                 ctx, tool_calls_log, checkpoint_count,
-                                f"iteration_{ctx.current_iteration}_after_{func_name}"
+                                f"iteration_{lc.current_iteration}_after_{func_name}"
                             )
                             checkpoint_count += 1
 
                         await self.event_bus.publish(Event(
                             type=EventType.TOOL_CALL_END,
-                            data={"agent_id": self.id, "tool": func_name, "success": result.success},
+                            data={"agent_id": self.id, "tool": func_name,
+                                  "success": result.success,
+                                  "lifecycle_stage": lc.stage.value},
                             source=self.name,
                         ))
 
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc["id"],
-                            "content": result.output if result.success else f"Error: {result.error}",
-                        })
+                    # End of tool_calls for-loop — check if should exit the while loop
+                    if should_exit or lc.stage in (LifecycleStage.COMPLETE, LifecycleStage.FAILED):
+                        break
+
                 else:
+                    # No tool calls — LLM thinks it's done
                     final_output = response.get("content", "")
                     messages.append({"role": "assistant", "content": final_output})
 
-                    # v1.2: GoalTracker — check if all sub-goals are fulfilled
-                    if tracker.items:
-                        progress = tracker.progress()
-                        if tracker.all_fulfilled():
+                    progress = lc.tracker.progress()
+                    if lc.tracker.items:
+                        if lc.tracker.all_fulfilled():
                             final_output += (
-                                f"\n\n✅ 目标达成：{progress['fulfilled']}/{progress['items']} "
+                                f"\n\n✅ 任务完成：{progress['fulfilled']}/{progress['items']} "
                                 f"项要求已满足。"
                             )
                         else:
-                            remaining_list = "、".join(
-                                r.text[:40] for r in tracker.remaining()[:5]
+                            remaining = "、".join(
+                                r.text[:40] for r in lc.tracker.remaining()[:5]
                             )
                             final_output += (
                                 f"\n\n⚠️ 进度：{progress['fulfilled']}/{progress['items']} "
-                                f"已完成。待完成：{remaining_list}"
+                                f"已完成。待办：{remaining}"
                             )
-                        logger.info(
-                            "GoalTracker exit: %d/%d fulfilled",
-                            progress["fulfilled"], progress["items"],
-                        )
 
-                    # Auto-save to memory if substantive
+                    lc.auto_progress_to(LifecycleStage.COMPLETE)
+
+                    # Save to memory
                     if len(final_output) > 100:
                         self.memory.save_message(
                             ctx.session_id, "assistant", final_output,
-                            {
-                                "agent": self.name,
-                                "iterations": ctx.current_iteration,
-                                "goal_progress": tracker.progress() if tracker.items else None,
-                            },
+                            {"agent": self.name, "iterations": lc.current_iteration,
+                             "goal_progress": lc.tracker.progress() if lc.tracker.items else None},
                         )
                         memory_updates += 1
 
-                    # Final checkpoint
                     last_checkpoint = self._save_checkpoint(
                         ctx, tool_calls_log, checkpoint_count, "completed"
                     )
                     checkpoint_count += 1
 
-                    await self.event_bus.publish(Event(
-                        type=EventType.AGENT_COMPLETED,
-                        data={
-                            "agent_id": self.id,
-                            "output_length": len(final_output),
-                            "goal_progress": tracker.progress() if tracker.items else None,
-                            "session_id": ctx.session_id,
-                            "lifecycle_stage": "COMPLETE",
-                        },
-                        source=self.name,
-                    ))
+                    await self._emit_lifecycle(lc, "Completed", ctx.session_id, extra={
+                        "output_length": len(final_output),
+                        "goal_progress": lc.tracker.progress() if lc.tracker.items else None,
+                    })
                     break
 
             else:
-                final_output = "（达到最大迭代次数，任务可能未完成）"
-                last_checkpoint = self._save_checkpoint(
-                    ctx, tool_calls_log, checkpoint_count, "max_iterations_reached"
-                )
-                checkpoint_count += 1
+                # can_continue() returned False — forced stop
+                if not final_output:
+                    final_output = (
+                        lc.forced_stop_reason
+                        or f"（任务终止：阶段[{lc.stage.value}]，迭代 {lc.current_iteration}）"
+                    )
                 await self.event_bus.publish(Event(
                     type=EventType.AGENT_ERROR,
-                    data={"agent_id": self.id, "error": "Max iterations reached"},
+                    data={"agent_id": self.id, "error": lc.forced_stop_reason or "Task force-stopped",
+                          "lifecycle_stage": lc.stage.value, "session_id": ctx.session_id},
                     source=self.name,
                 ))
 
@@ -427,15 +430,43 @@ class BaseAgent(ABC):
             pass
 
         return AgentResult(
-            success=True,
+            success=lc.stage != LifecycleStage.FAILED,
             output=final_output,
             tool_calls=tool_calls_log,
-            iterations=ctx.current_iteration,
+            iterations=lc.current_iteration,
             memory_updates=memory_updates,
             duration_ms=duration,
             checkpoint_count=checkpoint_count,
             last_checkpoint=last_checkpoint,
         )
+
+    async def _emit_lifecycle(self, lc, action: str, session_id: str,
+                             extra: dict | None = None) -> None:
+        """Emit a lifecycle-aware event through the EventBus."""
+        from kernel.lifecycle import LifecycleStage
+
+        data: dict[str, Any] = {
+            "agent_id": self.id,
+            "agent_name": self.name,
+            "lifecycle_stage": lc.stage.value,
+            "iteration": lc.current_iteration,
+            "session_id": session_id,
+            "goal_progress": lc.tracker.progress(),
+            "action": action,
+        }
+        if extra:
+            data.update(extra)
+
+        event_type = EventType.AGENT_COMPLETED if lc.stage == LifecycleStage.COMPLETE else \
+                     EventType.AGENT_ERROR if lc.stage == LifecycleStage.FAILED else \
+                     EventType.AGENT_STARTED if lc.stage == LifecycleStage.INIT else \
+                     EventType.AGENT_THINKING
+
+        await self.event_bus.publish(Event(
+            type=event_type,
+            data=data,
+            source=self.name,
+        ))
 
     def _save_checkpoint(self, ctx: AgentContext, tool_calls: list[dict],
                          count: int, step: str) -> dict | None:
