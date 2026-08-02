@@ -67,6 +67,31 @@ CRITICAL_COMMANDS = [
 ]
 
 
+def _find_bash() -> str:
+    """Find the path to bash.exe for subprocess calls. Prefers Git Bash.
+
+    On Windows, subprocess.run(['bash', ...]) often fails because Python's
+    environment doesn't include Git Bash's /usr/bin in PATH. This resolves
+    the actual bash.exe location.
+    """
+    import os
+    candidates = [
+        r"C:\Program Files\Git\usr\bin\bash.exe",
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Windows\System32\bash.exe",
+        "/usr/bin/bash",
+        "/bin/bash",
+    ]
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+    for path_dir in os.environ.get("PATH", "").split(os.pathsep):
+        candidate = os.path.join(path_dir, "bash.exe")
+        if os.path.isfile(candidate):
+            return candidate
+    return "bash"
+
+
 class BaseTool(ABC):
     """Base class for all tools."""
 
@@ -229,8 +254,9 @@ On Windows: commands run through bash (Git Bash). Use Unix-style syntax:
                 command = "python"
 
             if platform.system() == "Windows":
+                bash = _find_bash()
                 result = subprocess.run(
-                    ["bash", "-c", command],
+                    [bash, "-c", command],
                     capture_output=True, text=True,
                     timeout=timeout, cwd=str(Path.cwd()),
                     env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"},
@@ -424,6 +450,189 @@ class SaveCheckpointTool(BaseTool):
             return ToolResult(success=False, error=str(e))
 
 
+# ── Sprint 6.5: Server Restart Tool ──────────────────────
+
+class ServerRestartTool(BaseTool):
+    """Precision server restart — kills process on a specific port, restarts cleanly.
+
+    Unlike global 'taskkill -f -im python.exe' which kills ALL Python processes,
+    this tool uses platform-specific port lookup to target only the server process.
+
+    On Windows: netstat -ano | findstr :PORT → taskkill /PID
+    On Linux:   lsof -ti :PORT → kill (or ss -tlnp)
+    """
+
+    def definition(self):
+        return ToolDefinition(
+            name="restart_server",
+            description="""Stop and restart the Personal AI OS API server on a given port.
+
+Only kills the process listening on the specified port — never all Python processes.
+After stopping, starts a new server instance using 'python main.py serve --no-reload'.
+
+On Windows (via bash): kills via netstat + taskkill /PID.
+On Linux: kills via lsof -ti or ss.
+
+Safe to run repeatedly — if no process is on the port, skips kill and restarts.""",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "port": {"type": "integer", "description": "Server port (default: 8001)", "default": 8001},
+                    "host": {"type": "string", "description": "Bind host (default: 127.0.0.1)", "default": "127.0.0.1"},
+                    "project_dir": {"type": "string", "description": "Project root directory (default: auto-detect)", "default": ""},
+                },
+                "required": [],
+            },
+            category="process",
+            permission_level="execute",
+            risk_level="dangerous",
+        )
+
+    async def execute(self, port: int = 8001, host: str = "127.0.0.1",
+                      project_dir: str = "") -> ToolResult:
+        start = time.time()
+        try:
+            import platform
+            import os
+
+            # Resolve project directory
+            if not project_dir:
+                project_dir = str(Path(__file__).parent.parent)
+
+            system = platform.system()
+            kill_output = ""
+
+            # ── Step 1: Kill process on target port ──
+            if system == "Windows":
+                kill_output = await self._kill_port_windows(port)
+            else:
+                kill_output = await self._kill_port_linux(port)
+
+            # Brief wait for OS to release the port
+            time.sleep(1.5)
+
+            # ── Step 2: Start new server ──
+            serve_cmd = (
+                f"cd {project_dir} && "
+                f"python main.py serve --host {host} --port {port} --no-reload"
+            )
+
+            is_windows = system == "Windows"
+            if is_windows:
+                serve_process = subprocess.Popen(
+                    ["bash", "-c", serve_cmd],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    cwd=project_dir,
+                    env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                )
+            else:
+                serve_process = subprocess.Popen(
+                    serve_cmd, shell=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    cwd=project_dir,
+                )
+
+            # ── Step 3: Verify startup ──
+            time.sleep(3)
+            import httpx
+            try:
+                async with httpx.AsyncClient(timeout=5) as client:
+                    resp = await client.get(f"http://{host}:{port}/health")
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        return ToolResult(
+                            success=True,
+                            output=(
+                                f"Server restarted successfully.\n"
+                                f"  Killed: {kill_output.strip() or 'no process found'}\n"
+                                f"  Started: PID {serve_process.pid} on {host}:{port}\n"
+                                f"  Health: {data.get('status', 'ok')} v{data.get('version', '?')}"
+                            ),
+                            data={
+                                "pid": serve_process.pid,
+                                "port": port,
+                                "host": host,
+                                "version": data.get("version", ""),
+                            },
+                            duration_ms=(time.time() - start) * 1000,
+                        )
+            except Exception as health_err:
+                # Server might still be starting — return partial success
+                return ToolResult(
+                    success=True,
+                    output=(
+                        f"Server process started (PID {serve_process.pid}).\n"
+                        f"  Killed: {kill_output.strip() or 'no process found'}\n"
+                        f"  Health check: not yet responding ({health_err})"
+                    ),
+                    data={"pid": serve_process.pid, "port": port, "host": host},
+                    duration_ms=(time.time() - start) * 1000,
+                )
+
+        except Exception as e:
+            return ToolResult(
+                success=False,
+                error=f"Server restart failed: {e}",
+                duration_ms=(time.time() - start) * 1000,
+            )
+
+    def _run_cmd(self, args: list[str], timeout: int = 10) -> str:
+        """Run a command safely and return stdout, handling encoding issues."""
+        import os
+        result = subprocess.run(
+            args, capture_output=True, timeout=timeout,
+            encoding="utf-8", errors="replace",
+        )
+        return (result.stdout or "").strip()
+
+    async def _kill_port_windows(self, port: int) -> str:
+        """Find and kill the process on a given port using netstat + taskkill /PID."""
+        import os
+
+        bash = _find_bash()
+        output = self._run_cmd(
+            [bash, "-c", f"netstat -ano | grep ':{port} ' | grep LISTENING | head -5"],
+        )
+
+        killed = []
+        for line in output.split("\n"):
+            if not line.strip():
+                continue
+            parts = line.split()
+            if len(parts) >= 5:
+                pid = parts[-1]
+                if pid.isdigit():
+                    kill_output = self._run_cmd(["taskkill", "/PID", pid, "/F"])
+                    killed.append(f"PID {pid}: {kill_output}")
+
+        if not killed:
+            return f"no process found on port {port}"
+        return "; ".join(killed)
+
+    async def _kill_port_linux(self, port: int) -> str:
+        """Find and kill the process on a given port using lsof or ss."""
+        import os
+
+        output = self._run_cmd(["lsof", "-ti", f":{port}"])
+        pids = [p for p in output.split("\n") if p.strip()]
+
+        if not pids:
+            bash = _find_bash()
+            output = self._run_cmd(
+                [bash, "-c", f"ss -tlnp 'sport = :{port}' | grep -oP 'pid=\\K\\d+'"],
+            )
+            pids = [p for p in output.split("\n") if p.strip()]
+
+        killed = []
+        for pid in pids:
+            kill_output = self._run_cmd(["kill", pid])
+            killed.append(f"PID {pid}: {kill_output or 'terminated'}")
+
+        if not killed:
+            return f"no process found on port {port}"
+        return "; ".join(killed)
+
+
 # ── Tool Registry ───────────────────────────────────────
 
 class ToolRegistry:
@@ -550,4 +759,5 @@ def get_tool_registry() -> ToolRegistry:
         _registry.register(MemorySaveTool())
         _registry.register(CreateProjectTool())
         _registry.register(SaveCheckpointTool())
+        _registry.register(ServerRestartTool())
     return _registry

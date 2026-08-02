@@ -115,5 +115,26 @@ def profile():
     asyncio.run(_profile())
 
 
+@app.command()
+def restart(port: int = 8001, host: str = "127.0.0.1"):
+    """Restart the server gracefully — kill only the process on PORT, then relaunch.
+
+    Unlike 'taskkill -f -im python.exe' (which kills ALL Python),
+    this uses netstat/lsof to find only the server process on the given port.
+    """
+
+    async def _restart():
+        from tools.registry import ServerRestartTool
+        tool = ServerRestartTool()
+        result = await tool.execute(port=port, host=host)
+        if result.success:
+            print(f"[OK] {result.output}")
+        else:
+            print(f"[FAIL] {result.error}", file=sys.stderr)
+            sys.exit(1)
+
+    asyncio.run(_restart())
+
+
 if __name__ == "__main__":
     app()
