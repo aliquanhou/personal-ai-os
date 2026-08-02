@@ -154,6 +154,8 @@ class PluginRuntime:
             "description": manifest.get("description", ""),
             "author": manifest.get("author", ""),
             "category": manifest.get("category", "general"),
+            "icon": manifest.get("icon", ""),
+            "official": manifest.get("official", False),
             "skills": manifest.get("skills", []),
             "target_agents": manifest.get("target_agents", []),
             "enabled": name in self._active,

@@ -1,0 +1,9 @@
+{
+  "name": "v1-research",
+  "slug": "v1-research",
+  "description": "分析AI Agent市场的发展趋势，输出一份简短报告到 workspace/projects/v1-research/report.md",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T15:09:43.580288+00:00",
+  "updated_at": "2026-08-02T15:09:43.580288+00:00"
+}

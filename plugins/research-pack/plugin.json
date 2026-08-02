@@ -1,12 +1,1 @@
-{
-  "name": "research-pack",
-  "version": "1.0.0",
-  "display_name": "Research & Analysis Pack",
-  "description": "Market research, competitor analysis, and strategic planning tools. For research_agent.",
-  "author": "Personal AI OS Core",
-  "category": "research",
-  "skills": ["market_research"],
-  "target_agents": ["research_agent"],
-  "enabled": true,
-  "min_os_version": "0.7.0"
-}
+{"name":"official-research","version":"1.0.0","display_name":"Research Agent Plugin","description":"信息整理、市场分析、竞品研究、报告生成。输入研究主题 → 制定计划 → 收集数据 → 生成报告。","author":"Personal AI OS Official","category":"research","icon":"Search","official":true,"skills":["market_research"],"target_agents":["research_agent"],"enabled":true,"min_os_version":"1.0.0"}

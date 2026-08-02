@@ -1,0 +1,1 @@
+{"name":"official-browser","version":"1.0.0","display_name":"Web Assistant Plugin","description":"网页内容抓取、信息收集、在线查询。支持 HTTP 请求、内容提取和结构化整理。","author":"Personal AI OS Official","category":"network","icon":"Globe","official":true,"skills":["market_research"],"target_agents":["research_agent"],"enabled":false,"min_os_version":"1.0.0"}

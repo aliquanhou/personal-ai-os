@@ -40,3 +40,4 @@ workspace/projects/**/backups/
 .pytest_cache/
 htmlcov/
 .coverage
+*.db
