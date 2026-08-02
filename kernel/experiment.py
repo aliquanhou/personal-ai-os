@@ -335,7 +335,7 @@ class ExperimentRunner:
         if not path.exists():
             return
         try:
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
             for eid, ed in data.get("experiments", {}).items():
                 exp = Experiment(
                     id=eid,

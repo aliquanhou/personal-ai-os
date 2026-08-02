@@ -1,0 +1,9 @@
+{
+  "name": "ecommerce-ops-v2",
+  "slug": "ecommerce-ops-v2",
+  "description": "创建一个电商运营数字员工。要求：1. 创建项目目录 2. 生成requirements.md 3. 生成architecture.md 4. 创建SQLite数据库模型 5. 编写Python MVP 6. 执行测试 7. 输出报告。全部放到 workspace/projects/ecommerce-ops-v2/ 下面。",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T16:48:33.579221+00:00",
+  "updated_at": "2026-08-02T16:48:33.579221+00:00"
+}

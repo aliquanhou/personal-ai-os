@@ -659,7 +659,7 @@ class SkillRegistry:
         if not path.exists():
             return
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
             self._agent_skills = data.get("agent_skills", {})
             for name, sd in data.get("skills", {}).items():
                 skill = SkillDefinition(

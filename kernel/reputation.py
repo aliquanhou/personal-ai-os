@@ -218,7 +218,7 @@ class ReputationRegistry:
         if not path.exists():
             return
         try:
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
             for name, d in data.items():
                 rep = AgentReputation(agent_name=name)
                 rep.total_tasks = d.get("total_tasks", 0)

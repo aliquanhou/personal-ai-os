@@ -355,7 +355,7 @@ class ImprovementRegistry:
         if not path.exists():
             return
         try:
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
             self._counters = data.get("counters", self._counters)
             for pid, pd in data.get("proposals", {}).items():
                 prop = ImprovementProposal(
