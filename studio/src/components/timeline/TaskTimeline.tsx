@@ -78,34 +78,43 @@ export default function TaskTimeline() {
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [isLoading])
 
-  // Merge historical steps from messages when no live session
+  // Only show history when there are no live SSE events
+  const showLiveFirst = liveSteps.length > 0
   const historySteps: TimelineStep[] = []
   let histId = 0
-  for (const msg of messages) {
-    if (msg.role === 'user') {
-      historySteps.push({
-        id: ++histId, type: 'user:message', source: 'user',
-        label: '用户请求', detail: (msg as any).content?.slice(0, 120) || '',
-        status: 'done', time: new Date(msg.timestamp).toLocaleTimeString(),
-      })
-    }
-    const tc = (msg as any).toolCalls
-    if (tc && Array.isArray(tc)) {
-      for (const t of tc) {
+  if (!showLiveFirst) {
+    let lastRole = ''
+    for (const msg of messages) {
+      if (msg.role === 'user') {
+        // Skip consecutive identical user messages (dedup)
+        if (lastRole === 'user') continue
+        lastRole = 'user'
         historySteps.push({
-          id: ++histId, type: 'tool:call:end', source: (msg as any).agent || 'agent',
-          label: t.tool, detail: t.output?.slice(0, 100) || '',
-          status: t.success ? 'done' : 'error',
-          time: new Date(msg.timestamp).toLocaleTimeString(),
+          id: ++histId, type: 'user:message', source: 'user',
+          label: '用户请求', detail: (msg as any).content?.slice(0, 120) || '',
+          status: 'done', time: new Date(msg.timestamp).toLocaleTimeString(),
         })
       }
-    }
-    if (msg.role === 'assistant' && (msg as any).content?.length > 0) {
-      historySteps.push({
-        id: ++histId, type: 'agent:completed', source: (msg as any).agent || 'ceo',
-        label: '任务完成', detail: `${(msg as any).iterations || '?'} iterations · ${((msg as any).toolCalls || []).length} tools`,
-        status: 'done', time: new Date(msg.timestamp).toLocaleTimeString(),
-      })
+      const tc = (msg as any).toolCalls
+      if (tc && Array.isArray(tc)) {
+        lastRole = 'tool'
+        for (const t of tc) {
+          historySteps.push({
+            id: ++histId, type: 'tool:call:end', source: (msg as any).agent || 'agent',
+            label: t.tool, detail: t.output?.slice(0, 100) || '',
+            status: t.success ? 'done' : 'error',
+            time: new Date(msg.timestamp).toLocaleTimeString(),
+          })
+        }
+      }
+      if (msg.role === 'assistant' && (msg as any).content?.length > 0) {
+        lastRole = 'assistant'
+        historySteps.push({
+          id: ++histId, type: 'agent:completed', source: (msg as any).agent || 'ceo',
+          label: '任务完成', detail: `${(msg as any).iterations || '?'} iterations · ${((msg as any).toolCalls || []).length} tools`,
+          status: 'done', time: new Date(msg.timestamp).toLocaleTimeString(),
+        })
+      }
     }
   }
 
