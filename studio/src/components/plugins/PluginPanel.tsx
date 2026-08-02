@@ -117,7 +117,7 @@ function PluginCard({ p, onToggle }: { p: PluginInfo & { official?: boolean }, o
     <div className={`card hover:border-gray-700 transition-colors relative ${p.enabled ? 'border-gray-800' : 'border-gray-800/50 opacity-60'}`}>
       {p.official && (
         <div className="absolute top-2 right-2">
-          <Star size={12} className="text-kernel-400" title="Official Plugin" />
+          <span title="Official Plugin"><Star size={12} className="text-kernel-400" /></span>
         </div>
       )}
       <div className="flex items-start justify-between">

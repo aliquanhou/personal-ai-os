@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send, Loader2, Wrench, User, Bot } from 'lucide-react'
-import { useAppStore, nextId } from '../stores/appStore'
-import { sendMessage } from '../lib/api'
+import { useAppStore, nextId } from '../../stores/appStore'
+import { sendMessage } from '../../lib/api'
 
 export default function ChatPanel() {
   const {

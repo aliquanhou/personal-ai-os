@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/chat/chatpanel.tsx","./src/components/common/sidebar.tsx","./src/components/memory_viewer/memoryviewer.tsx","./src/components/plugins/pluginpanel.tsx","./src/components/timeline/tasktimeline.tsx","./src/components/workspace/workspacepanel.tsx","./src/lib/api.ts","./src/stores/appstore.ts"],"version":"5.6.3"}
