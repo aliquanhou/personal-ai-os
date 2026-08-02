@@ -1,0 +1,9 @@
+{
+  "name": "test-contract",
+  "slug": "test-contract",
+  "description": "创建一个test.py到workspace/projects/test-contract/test.py，内容是print(\"contract ok\")，然后运行它验证输出。",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T17:26:11.556194+00:00",
+  "updated_at": "2026-08-02T17:26:11.556194+00:00"
+}

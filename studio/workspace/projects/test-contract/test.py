@@ -1,0 +1,1 @@
+print("contract ok")

@@ -1,11 +1,7 @@
-"""Personal AI OS Tools — Tool Registry & Built-in Tools
+"""Personal AI OS Tools — Tool Registry & Built-in Tools v1.4
 
-The Tool system allows agents to perform real actions:
-- File operations (read, write, list)
-- Shell command execution
-- Web search
-- Memory operations
-- Project management
+All tools return the unified kernel.ToolResult contract.
+Separate stdout/stderr. Structured error codes. No None returns.
 """
 
 import json
@@ -17,17 +13,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from kernel.tool_contract import ToolResult, ToolErrorCode, ContractViolation
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ToolResult:
-    """Result of a tool execution."""
-    success: bool
-    output: str = ""
-    error: str = ""
-    data: Any = None
-    duration_ms: float = 0.0
 
 
 @dataclass
@@ -35,10 +23,10 @@ class ToolDefinition:
     """Definition of a tool that can be called by agents."""
     name: str
     description: str
-    parameters: dict  # JSON Schema for parameters
+    parameters: dict
     category: str = "general"
     permission_level: str = "read"
-    risk_level: str = "safe"  # Sprint 2: safe/moderate/dangerous/critical
+    risk_level: str = "safe"
     handler: Any = None
 
 
@@ -51,11 +39,11 @@ class ApprovalResult:
 
 
 RISK_RULES = {
-    "safe": ApprovalResult(blocked=False, needs_approval=False, reason=""),
-    "moderate": ApprovalResult(blocked=False, needs_approval=False, reason="Auto-approved: moderate risk"),
-    "workspace_safe": ApprovalResult(blocked=False, needs_approval=False, reason="Auto-approved: workspace scoped"),
-    "dangerous": ApprovalResult(blocked=False, needs_approval=True, reason="需要人工批准：高风险操作"),
-    "critical": ApprovalResult(blocked=False, needs_approval=True, reason="需要人工批准：关键操作"),
+    "safe":           ApprovalResult(),
+    "moderate":       ApprovalResult(reason="Auto-approved: moderate risk"),
+    "workspace_safe": ApprovalResult(reason="Auto-approved: workspace scoped"),
+    "dangerous":      ApprovalResult(needs_approval=True, reason="需要人工批准：高风险操作"),
+    "critical":       ApprovalResult(needs_approval=True, reason="需要人工批准：关键操作"),
 }
 
 DANGEROUS_PATTERNS = [
@@ -67,18 +55,15 @@ CRITICAL_COMMANDS = [
     "format C:", "del /f /s C:\\", "DROP DATABASE",
 ]
 
-# Sprint 6.6: Commands that are safe within workspace/projects/
 WORKSPACE_SAFE_COMMANDS = [
     "pytest", "python ", "python3 ", "npm test", "npm run", "pip install",
     "git status", "git diff", "git log", "git add", "git commit",
     "ls ", "cat ", "head ", "tail ", "wc ", "find ", "grep ",
     "echo ", "which ", "pwd", "mkdir ", "touch ",
     "curl http://localhost", "curl http://127.0.0.1",
-    "cd /d/claude/personal-ai-os/workspace",
-    "cd workspace", "cd projects",
+    "cd /d/claude/personal-ai-os/workspace", "cd workspace", "cd projects",
 ]
 
-# Sprint 6.6: Commands that are never allowed even in workspace
 SYSTEM_RISK_COMMANDS = [
     "pip install --global", "npm install -g", "sudo ", "su ",
     "git push", "git reset --hard origin", "git clean -fd",
@@ -88,44 +73,44 @@ SYSTEM_RISK_COMMANDS = [
 ]
 
 
-def _find_bash() -> str:
-    """Find the path to bash.exe for subprocess calls. Prefers Git Bash.
+class BaseTool(ABC):
+    @abstractmethod
+    def definition(self) -> ToolDefinition: ...
+    @abstractmethod
+    async def execute(self, **kwargs) -> ToolResult: ...
 
-    On Windows, subprocess.run(['bash', ...]) often fails because Python's
-    environment doesn't include Git Bash's /usr/bin in PATH. This resolves
-    the actual bash.exe location.
-    """
+
+# ── Helpers ──────────────────────────────────────────────
+
+def _find_bash() -> str:
+    """Find the path to bash.exe for subprocess calls."""
     import os
     candidates = [
         r"C:\Program Files\Git\usr\bin\bash.exe",
         r"C:\Program Files\Git\bin\bash.exe",
         r"C:\Windows\System32\bash.exe",
-        "/usr/bin/bash",
-        "/bin/bash",
+        "/usr/bin/bash", "/bin/bash",
     ]
-    for path in candidates:
-        if os.path.isfile(path):
-            return path
-    for path_dir in os.environ.get("PATH", "").split(os.pathsep):
-        candidate = os.path.join(path_dir, "bash.exe")
-        if os.path.isfile(candidate):
-            return candidate
+    for p in candidates:
+        if os.path.isfile(p):
+            return p
+    for d in os.environ.get("PATH", "").split(os.pathsep):
+        c = os.path.join(d, "bash.exe")
+        if os.path.isfile(c):
+            return c
     return "bash"
 
 
-class BaseTool(ABC):
-    """Base class for all tools."""
-
-    @abstractmethod
-    def definition(self) -> ToolDefinition:
-        ...
-
-    @abstractmethod
-    async def execute(self, **kwargs) -> ToolResult:
-        ...
+def _run_cmd(args: list[str], timeout: int = 10) -> tuple[str, str, int]:
+    """Run a command, return (stdout, stderr, exit_code)."""
+    result = subprocess.run(args, capture_output=True, timeout=timeout,
+                            encoding="utf-8", errors="replace")
+    return (result.stdout or "").strip(), (result.stderr or "").strip(), result.returncode
 
 
-# ── Built-in Tools ──────────────────────────────────────
+# ═══════════════════════════════════════════════════════════
+# BUILT-IN TOOLS (v1.4 — unified ToolResult contract)
+# ═══════════════════════════════════════════════════════════
 
 class ReadFileTool(BaseTool):
     def definition(self):
@@ -136,33 +121,31 @@ class ReadFileTool(BaseTool):
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "Path to the file to read"},
-                    "offset": {"type": "integer", "description": "Line offset to start reading from", "default": 0},
-                    "limit": {"type": "integer", "description": "Max number of lines to read", "default": 200},
+                    "offset": {"type": "integer", "description": "Line offset", "default": 0},
+                    "limit": {"type": "integer", "description": "Max lines", "default": 200},
                 },
                 "required": ["path"],
             },
-            category="file",
-            permission_level="read",
-            risk_level="safe",
+            category="file", permission_level="read", risk_level="safe",
         )
 
     async def execute(self, path: str = "", offset: int = 0, limit: int = 200) -> ToolResult:
-        start = time.time()
+        t0 = time.time()
         try:
             p = Path(path)
             if not p.exists():
-                return ToolResult(success=False, error=f"File not found: {path}", duration_ms=(time.time() - start) * 1000)
+                return ToolResult.fail(ToolErrorCode.FILE_NOT_FOUND, f"文件不存在: {path}",
+                                       duration_ms=(time.time() - t0) * 1000)
             content = p.read_text(encoding="utf-8", errors="replace")
             lines = content.split("\n")
-            selected = lines[offset:offset + limit]
-            return ToolResult(
-                success=True,
-                output="\n".join(selected),
+            return ToolResult.ok(
+                stdout="\n".join(lines[offset:offset + limit]),
                 data={"total_lines": len(lines), "offset": offset, "limit": limit},
-                duration_ms=(time.time() - start) * 1000,
+                duration_ms=(time.time() - t0) * 1000,
             )
         except Exception as e:
-            return ToolResult(success=False, error=str(e), duration_ms=(time.time() - start) * 1000)
+            return ToolResult.fail(ToolErrorCode.FILE_NOT_FOUND, str(e),
+                                   duration_ms=(time.time() - t0) * 1000)
 
 
 class WriteFileTool(BaseTool):
@@ -174,28 +157,27 @@ class WriteFileTool(BaseTool):
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "Path to the file to write"},
-                    "content": {"type": "string", "description": "Content to write to the file"},
+                    "content": {"type": "string", "description": "Content to write"},
                 },
                 "required": ["path", "content"],
             },
-            category="file",
-            permission_level="write",
-            risk_level="moderate",
+            category="file", permission_level="write", risk_level="moderate",
         )
 
     async def execute(self, path: str = "", content: str = "") -> ToolResult:
-        start = time.time()
+        t0 = time.time()
         try:
             p = Path(path)
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(content, encoding="utf-8")
-            return ToolResult(
-                success=True,
-                output=f"File written: {path} ({len(content)} chars)",
-                duration_ms=(time.time() - start) * 1000,
+            return ToolResult.ok(
+                stdout=f"File written: {path} ({len(content)} chars)",
+                data={"path": path, "size": len(content)},
+                duration_ms=(time.time() - t0) * 1000,
             )
         except Exception as e:
-            return ToolResult(success=False, error=str(e), duration_ms=(time.time() - start) * 1000)
+            return ToolResult.fail(ToolErrorCode.WRITE_FAILED, str(e),
+                                   duration_ms=(time.time() - t0) * 1000)
 
 
 class ListFilesTool(BaseTool):
@@ -207,65 +189,58 @@ class ListFilesTool(BaseTool):
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "Directory path to list"},
-                    "pattern": {"type": "string", "description": "Glob pattern to filter (e.g., *.py)", "default": "*"},
+                    "pattern": {"type": "string", "description": "Glob pattern", "default": "*"},
                 },
                 "required": ["path"],
             },
-            category="file",
-            permission_level="read",
-            risk_level="safe",
+            category="file", permission_level="read", risk_level="safe",
         )
 
     async def execute(self, path: str = ".", pattern: str = "*") -> ToolResult:
-        start = time.time()
+        t0 = time.time()
         try:
             p = Path(path)
             if not p.exists():
-                return ToolResult(success=False, error=f"Directory not found: {path}")
+                return ToolResult.fail(ToolErrorCode.DIRECTORY_NOT_FOUND, f"目录不存在: {path}",
+                                       duration_ms=(time.time() - t0) * 1000)
             files = sorted(p.glob(pattern))
-            output = []
+            lines = []
             for f in files[:200]:
                 prefix = "[D]" if f.is_dir() else "[F]"
                 size = f.stat().st_size if f.is_file() else 0
-                output.append(f"{prefix} {f.name} ({size}B)")
-            return ToolResult(
-                success=True,
-                output="\n".join(output),
+                lines.append(f"{prefix} {f.name} ({size}B)")
+            return ToolResult.ok(
+                stdout="\n".join(lines),
                 data={"count": len(files), "path": str(p.absolute())},
-                duration_ms=(time.time() - start) * 1000,
+                duration_ms=(time.time() - t0) * 1000,
             )
         except Exception as e:
-            return ToolResult(success=False, error=str(e), duration_ms=(time.time() - start) * 1000)
+            return ToolResult.fail(ToolErrorCode.DIRECTORY_NOT_FOUND, str(e),
+                                   duration_ms=(time.time() - t0) * 1000)
 
 
 class ShellTool(BaseTool):
+    """v1.4: Separates stdout/stderr. Structured error codes on failure."""
+
     def definition(self):
         return ToolDefinition(
             name="shell",
             description="""Execute a shell command and return the output.
 
-On Windows: commands run through bash (Git Bash). Use Unix-style syntax:
-  - mkdir -p dir/          (not 'md' or 'mkdir dir\\')
-  - ls -la                 (not 'dir')
-  - python script.py       (not 'python3')
-  - export VAR=val         (for env vars)
-  - cd /d/path && command  (for changing directory)
-  - command1 && command2   (for chaining)""",
+On Windows: commands run through bash (Git Bash). Use Unix-style syntax.""",
             parameters={
                 "type": "object",
                 "properties": {
-                    "command": {"type": "string", "description": "Shell command to execute (bash syntax)"},
+                    "command": {"type": "string", "description": "Shell command (bash syntax)"},
                     "timeout": {"type": "integer", "description": "Timeout in seconds", "default": 30},
                 },
                 "required": ["command"],
             },
-            category="process",
-            permission_level="execute",
-            risk_level="workspace_safe",
+            category="process", permission_level="execute", risk_level="workspace_safe",
         )
 
     async def execute(self, command: str = "", timeout: int = 30) -> ToolResult:
-        start = time.time()
+        t0 = time.time()
         try:
             import platform
             command = command.replace("python3 ", "python ").replace("python3\n", "python\n")
@@ -278,8 +253,8 @@ On Windows: commands run through bash (Git Bash). Use Unix-style syntax:
                 bash = _find_bash()
                 result = subprocess.run(
                     [bash, "-c", command],
-                    capture_output=True, text=True,
-                    timeout=timeout, cwd=str(Path.cwd()),
+                    capture_output=True, text=True, timeout=timeout,
+                    cwd=str(Path.cwd()),
                     env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"},
                 )
             else:
@@ -287,19 +262,41 @@ On Windows: commands run through bash (Git Bash). Use Unix-style syntax:
                     command, shell=True, capture_output=True, text=True,
                     timeout=timeout, cwd=str(Path.cwd()),
                 )
-            output = result.stdout
-            if result.stderr:
-                output += "\n[STDERR]\n" + result.stderr
-            return ToolResult(
-                success=result.returncode == 0,
-                output=output[:10000],
+
+            stdout = (result.stdout or "").strip()
+            stderr = (result.stderr or "").strip()
+            duration = (time.time() - t0) * 1000
+
+            if result.returncode == 0 and not stderr:
+                return ToolResult.ok(stdout=stdout, duration_ms=duration)
+
+            if result.returncode != 0:
+                code = ToolContract.classify_error(stderr or stdout)
+                return ToolResult.fail(
+                    error_code=code,
+                    error_message=stderr or stdout or f"命令退出码 {result.returncode}",
+                    stdout=stdout,
+                    stderr=stderr,
+                    data={"exit_code": result.returncode},
+                    duration_ms=duration,
+                )
+
+            # returncode == 0 but has stderr (warnings, etc.)
+            return ToolResult.ok(
+                stdout=stdout,
+                stderr=stderr,
                 data={"exit_code": result.returncode},
-                duration_ms=(time.time() - start) * 1000,
+                duration_ms=duration,
             )
         except subprocess.TimeoutExpired:
-            return ToolResult(success=False, error=f"Command timed out after {timeout}s", duration_ms=timeout * 1000)
+            return ToolResult.fail(ToolErrorCode.TIMEOUT, f"命令超时 ({timeout}s)",
+                                   duration_ms=timeout * 1000)
+        except FileNotFoundError:
+            return ToolResult.fail(ToolErrorCode.SHELL_NOT_FOUND, "Shell 不可用",
+                                   duration_ms=(time.time() - t0) * 1000)
         except Exception as e:
-            return ToolResult(success=False, error=str(e), duration_ms=(time.time() - start) * 1000)
+            return ToolResult.fail(ToolErrorCode.UNKNOWN_ERROR, str(e),
+                                   duration_ms=(time.time() - t0) * 1000)
 
 
 class MemorySearchTool(BaseTool):
@@ -316,32 +313,30 @@ class MemorySearchTool(BaseTool):
     def definition(self):
         return ToolDefinition(
             name="search_memory",
-            description="Search the user's personal memory for relevant knowledge, decisions, and experiences.",
+            description="Search the user's personal memory.",
             parameters={
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Search query"},
-                    "category": {"type": "string", "description": "Knowledge category filter", "default": ""},
+                    "category": {"type": "string", "description": "Category filter", "default": ""},
                 },
                 "required": ["query"],
             },
-            category="memory",
-            permission_level="read",
-            risk_level="safe",
+            category="memory", permission_level="read", risk_level="safe",
         )
 
     async def execute(self, query: str = "", category: str = "") -> ToolResult:
-        start = time.time()
+        t0 = time.time()
         try:
             results = self.memory.search_knowledge(query, category=category or None)
-            return ToolResult(
-                success=True,
-                output=json.dumps(results, ensure_ascii=False, indent=2),
-                data=results,
-                duration_ms=(time.time() - start) * 1000,
+            return ToolResult.ok(
+                stdout=json.dumps(results, ensure_ascii=False, indent=2),
+                data={"results": results},
+                duration_ms=(time.time() - t0) * 1000,
             )
         except Exception as e:
-            return ToolResult(success=False, error=str(e))
+            return ToolResult.fail(ToolErrorCode.UNKNOWN_ERROR, str(e),
+                                   duration_ms=(time.time() - t0) * 1000)
 
 
 class MemorySaveTool(BaseTool):
@@ -358,26 +353,24 @@ class MemorySaveTool(BaseTool):
     def definition(self):
         return ToolDefinition(
             name="save_to_memory",
-            description="Save a fact, knowledge, or decision to the user's personal memory.",
+            description="Save a fact, knowledge, or decision to personal memory.",
             parameters={
                 "type": "object",
                 "properties": {
                     "type": {"type": "string", "enum": ["knowledge", "decision", "experience", "task"]},
                     "title": {"type": "string", "description": "Title or summary"},
                     "content": {"type": "string", "description": "Full content"},
-                    "category": {"type": "string", "description": "Category (for knowledge)", "default": "general"},
+                    "category": {"type": "string", "description": "Category", "default": "general"},
                     "importance": {"type": "number", "description": "Importance 0.0-1.0", "default": 0.5},
                 },
                 "required": ["type", "title", "content"],
             },
-            category="memory",
-            permission_level="write",
-            risk_level="moderate",
+            category="memory", permission_level="write", risk_level="moderate",
         )
 
     async def execute(self, type: str = "knowledge", title: str = "", content: str = "",
                       category: str = "general", importance: float = 0.5) -> ToolResult:
-        start = time.time()
+        t0 = time.time()
         try:
             if type == "knowledge":
                 self.memory.save_knowledge(title, content, category=category, importance=importance)
@@ -387,21 +380,14 @@ class MemorySaveTool(BaseTool):
                 self.memory.record_experience(title=title, description=content)
             elif type == "task":
                 task_id = self.memory.create_task(title=title, description=content, project_id=category)
-                return ToolResult(
-                    success=True,
-                    output=f"Task created: {task_id} — {title}",
-                    duration_ms=(time.time() - start) * 1000,
-                )
-            return ToolResult(
-                success=True,
-                output=f"Saved {type}: {title}",
-                duration_ms=(time.time() - start) * 1000,
-            )
+                return ToolResult.ok(stdout=f"Task created: {task_id} — {title}",
+                                    duration_ms=(time.time() - t0) * 1000)
+            return ToolResult.ok(stdout=f"Saved {type}: {title}",
+                                duration_ms=(time.time() - t0) * 1000)
         except Exception as e:
-            return ToolResult(success=False, error=str(e))
+            return ToolResult.fail(ToolErrorCode.WRITE_FAILED, str(e),
+                                   duration_ms=(time.time() - t0) * 1000)
 
-
-# ── Sprint 3: Workspace Tools ────────────────────────────
 
 class CreateProjectTool(BaseTool):
     def definition(self):
@@ -416,25 +402,23 @@ class CreateProjectTool(BaseTool):
                 },
                 "required": ["name"],
             },
-            category="project",
-            permission_level="write",
-            risk_level="safe",
+            category="project", permission_level="write", risk_level="safe",
         )
 
     async def execute(self, name: str = "", description: str = "") -> ToolResult:
-        start = time.time()
+        t0 = time.time()
         try:
             from kernel.workspace import get_workspace
             ws = get_workspace()
             proj = ws.create_project(name, description)
-            return ToolResult(
-                success=True,
-                output=f"Project workspace created: {proj['slug']} at {proj['path']}",
+            return ToolResult.ok(
+                stdout=f"Project created: {proj['slug']} at {proj['path']}",
                 data=proj,
-                duration_ms=(time.time() - start) * 1000,
+                duration_ms=(time.time() - t0) * 1000,
             )
         except Exception as e:
-            return ToolResult(success=False, error=str(e))
+            return ToolResult.fail(ToolErrorCode.WRITE_FAILED, str(e),
+                                   duration_ms=(time.time() - t0) * 1000)
 
 
 class SaveCheckpointTool(BaseTool):
@@ -451,213 +435,28 @@ class SaveCheckpointTool(BaseTool):
                 },
                 "required": ["project_slug", "step"],
             },
-            category="project",
-            permission_level="write",
-            risk_level="safe",
+            category="project", permission_level="write", risk_level="safe",
         )
 
     async def execute(self, project_slug: str = "", step: str = "", details: str = "") -> ToolResult:
-        start = time.time()
+        t0 = time.time()
         try:
             from kernel.workspace import get_workspace
             ws = get_workspace()
             ws.save_checkpoint(project_slug, {"step": step, "completed": details})
-            return ToolResult(
-                success=True,
-                output=f"Checkpoint saved: {step}",
-                duration_ms=(time.time() - start) * 1000,
-            )
+            return ToolResult.ok(stdout=f"Checkpoint saved: {step}",
+                                duration_ms=(time.time() - t0) * 1000)
         except Exception as e:
-            return ToolResult(success=False, error=str(e))
+            return ToolResult.fail(ToolErrorCode.WRITE_FAILED, str(e),
+                                   duration_ms=(time.time() - t0) * 1000)
 
 
-# ── Sprint 6.5: Server Restart Tool ──────────────────────
-
-class ServerRestartTool(BaseTool):
-    """Precision server restart — kills process on a specific port, restarts cleanly.
-
-    Unlike global 'taskkill -f -im python.exe' which kills ALL Python processes,
-    this tool uses platform-specific port lookup to target only the server process.
-
-    On Windows: netstat -ano | findstr :PORT → taskkill /PID
-    On Linux:   lsof -ti :PORT → kill (or ss -tlnp)
-    """
-
-    def definition(self):
-        return ToolDefinition(
-            name="restart_server",
-            description="""Stop and restart the Personal AI OS API server on a given port.
-
-Only kills the process listening on the specified port — never all Python processes.
-After stopping, starts a new server instance using 'python main.py serve --no-reload'.
-
-On Windows (via bash): kills via netstat + taskkill /PID.
-On Linux: kills via lsof -ti or ss.
-
-Safe to run repeatedly — if no process is on the port, skips kill and restarts.""",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "port": {"type": "integer", "description": "Server port (default: 8001)", "default": 8001},
-                    "host": {"type": "string", "description": "Bind host (default: 127.0.0.1)", "default": "127.0.0.1"},
-                    "project_dir": {"type": "string", "description": "Project root directory (default: auto-detect)", "default": ""},
-                },
-                "required": [],
-            },
-            category="process",
-            permission_level="execute",
-            risk_level="dangerous",
-        )
-
-    async def execute(self, port: int = 8001, host: str = "127.0.0.1",
-                      project_dir: str = "") -> ToolResult:
-        start = time.time()
-        try:
-            import platform
-            import os
-
-            # Resolve project directory
-            if not project_dir:
-                project_dir = str(Path(__file__).parent.parent)
-
-            system = platform.system()
-            kill_output = ""
-
-            # ── Step 1: Kill process on target port ──
-            if system == "Windows":
-                kill_output = await self._kill_port_windows(port)
-            else:
-                kill_output = await self._kill_port_linux(port)
-
-            # Brief wait for OS to release the port
-            time.sleep(1.5)
-
-            # ── Step 2: Start new server ──
-            serve_cmd = (
-                f"cd {project_dir} && "
-                f"python main.py serve --host {host} --port {port} --no-reload"
-            )
-
-            is_windows = system == "Windows"
-            if is_windows:
-                serve_process = subprocess.Popen(
-                    ["bash", "-c", serve_cmd],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    cwd=project_dir,
-                    env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-                )
-            else:
-                serve_process = subprocess.Popen(
-                    serve_cmd, shell=True,
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    cwd=project_dir,
-                )
-
-            # ── Step 3: Verify startup ──
-            time.sleep(3)
-            import httpx
-            try:
-                async with httpx.AsyncClient(timeout=5) as client:
-                    resp = await client.get(f"http://{host}:{port}/health")
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        return ToolResult(
-                            success=True,
-                            output=(
-                                f"Server restarted successfully.\n"
-                                f"  Killed: {kill_output.strip() or 'no process found'}\n"
-                                f"  Started: PID {serve_process.pid} on {host}:{port}\n"
-                                f"  Health: {data.get('status', 'ok')} v{data.get('version', '?')}"
-                            ),
-                            data={
-                                "pid": serve_process.pid,
-                                "port": port,
-                                "host": host,
-                                "version": data.get("version", ""),
-                            },
-                            duration_ms=(time.time() - start) * 1000,
-                        )
-            except Exception as health_err:
-                # Server might still be starting — return partial success
-                return ToolResult(
-                    success=True,
-                    output=(
-                        f"Server process started (PID {serve_process.pid}).\n"
-                        f"  Killed: {kill_output.strip() or 'no process found'}\n"
-                        f"  Health check: not yet responding ({health_err})"
-                    ),
-                    data={"pid": serve_process.pid, "port": port, "host": host},
-                    duration_ms=(time.time() - start) * 1000,
-                )
-
-        except Exception as e:
-            return ToolResult(
-                success=False,
-                error=f"Server restart failed: {e}",
-                duration_ms=(time.time() - start) * 1000,
-            )
-
-    def _run_cmd(self, args: list[str], timeout: int = 10) -> str:
-        """Run a command safely and return stdout, handling encoding issues."""
-        import os
-        result = subprocess.run(
-            args, capture_output=True, timeout=timeout,
-            encoding="utf-8", errors="replace",
-        )
-        return (result.stdout or "").strip()
-
-    async def _kill_port_windows(self, port: int) -> str:
-        """Find and kill the process on a given port using netstat + taskkill /PID."""
-        import os
-
-        bash = _find_bash()
-        output = self._run_cmd(
-            [bash, "-c", f"netstat -ano | grep ':{port} ' | grep LISTENING | head -5"],
-        )
-
-        killed = []
-        for line in output.split("\n"):
-            if not line.strip():
-                continue
-            parts = line.split()
-            if len(parts) >= 5:
-                pid = parts[-1]
-                if pid.isdigit():
-                    kill_output = self._run_cmd(["taskkill", "/PID", pid, "/F"])
-                    killed.append(f"PID {pid}: {kill_output}")
-
-        if not killed:
-            return f"no process found on port {port}"
-        return "; ".join(killed)
-
-    async def _kill_port_linux(self, port: int) -> str:
-        """Find and kill the process on a given port using lsof or ss."""
-        import os
-
-        output = self._run_cmd(["lsof", "-ti", f":{port}"])
-        pids = [p for p in output.split("\n") if p.strip()]
-
-        if not pids:
-            bash = _find_bash()
-            output = self._run_cmd(
-                [bash, "-c", f"ss -tlnp 'sport = :{port}' | grep -oP 'pid=\\K\\d+'"],
-            )
-            pids = [p for p in output.split("\n") if p.strip()]
-
-        killed = []
-        for pid in pids:
-            kill_output = self._run_cmd(["kill", pid])
-            killed.append(f"PID {pid}: {kill_output or 'terminated'}")
-
-        if not killed:
-            return f"no process found on port {port}"
-        return "; ".join(killed)
-
-
-# ── Tool Registry ───────────────────────────────────────
+# ═══════════════════════════════════════════════════════════
+# TOOL REGISTRY (v1.4 — contract enforcement)
+# ═══════════════════════════════════════════════════════════
 
 class ToolRegistry:
-    """Central registry for all available tools with approval layer."""
+    """Central registry for all available tools with contract enforcement."""
 
     def __init__(self):
         self._tools: dict[str, BaseTool] = {}
@@ -688,12 +487,12 @@ class ToolRegistry:
             for t in self._tools.values()
         ]
 
-    # ── Sprint 2: Approval Layer ─────────────────────────
+    # ── Approval Layer ────────────────────────────────────
 
     def check_approval(self, name: str, args: dict) -> ApprovalResult:
         tool = self.get(name)
         if not tool:
-            return ApprovalResult(blocked=True, needs_approval=False, reason=f"Unknown tool: {name}")
+            return ApprovalResult(blocked=True, reason=f"Unknown tool: {name}")
 
         defn = tool.definition()
         risk = defn.risk_level
@@ -701,29 +500,22 @@ class ToolRegistry:
         if name == "shell":
             command = args.get("command", "")
             cl = command.lower()
-
-            # Layer 1: Block critical commands (never allowed)
             for pattern in CRITICAL_COMMANDS:
                 if pattern.lower() in cl:
-                    return ApprovalResult(blocked=True, needs_approval=False,
+                    return ApprovalResult(blocked=True,
                                          reason=f"禁止：命令包含危险操作 '{pattern}'")
             for pattern in SYSTEM_RISK_COMMANDS:
                 if pattern.lower() in cl:
-                    return ApprovalResult(blocked=False, needs_approval=True,
+                    return ApprovalResult(needs_approval=True,
                                          reason=f"需要批准：系统级操作 '{pattern}'")
-
-            # Layer 2: Auto-approve workspace-safe commands
-            # (pytest, python scripts, git status, npm test, etc.)
             for pattern in WORKSPACE_SAFE_COMMANDS:
                 if cl.startswith(pattern.lower()):
                     risk = "workspace_safe"
                     break
             else:
-                # Check: is the command scoped to workspace?
                 workspace_paths = ["workspace/", "workspace\\", "projects/"]
                 if any(wp in cl for wp in workspace_paths):
                     risk = "workspace_safe"
-                # Not workspace-safe — check for dangerous patterns
                 else:
                     for pattern in DANGEROUS_PATTERNS:
                         if pattern.lower() in cl:
@@ -735,7 +527,7 @@ class ToolRegistry:
             pl = path.lower()
             for pattern in DANGEROUS_PATTERNS:
                 if pattern.lower() in pl:
-                    return ApprovalResult(blocked=False, needs_approval=True,
+                    return ApprovalResult(needs_approval=True,
                                          reason=f"需要批准：写入敏感路径 '{path}'")
 
         result = RISK_RULES.get(risk, RISK_RULES["safe"])
@@ -769,22 +561,38 @@ class ToolRegistry:
     def get_approval_history(self) -> list[dict]:
         return self._approval_history[-50:]
 
+    # ── Contract-enforced execution ───────────────────────
+
     async def execute(self, tool_name: str, **kwargs) -> ToolResult:
+        """Execute a tool with contract enforcement on the result."""
         tool = self.get(tool_name)
         if not tool:
-            return ToolResult(success=False, error=f"Tool not found: {tool_name}")
+            return ToolResult.fail(ToolErrorCode.UNKNOWN_ERROR,
+                                   f"Tool not found: {tool_name}")
+
         try:
-            return await tool.execute(**kwargs)
+            result = await tool.execute(**kwargs)
+            if result is None:
+                raise ContractViolation(f"Tool '{tool_name}' returned None")
+            result.validate()
+            return result
+        except ContractViolation as e:
+            logger.warning("Tool contract violation: %s — %s", tool_name, e)
+            return ToolResult.fail(ToolErrorCode.INTERNAL_ERROR,
+                                   f"工具协议违反: {tool_name} — {e}")
         except Exception as e:
             logger.exception("Tool execution error: %s", tool_name)
-            return ToolResult(success=False, error=str(e))
+            return ToolResult.fail(ToolErrorCode.UNKNOWN_ERROR, str(e))
 
     @property
     def tool_names(self) -> list[str]:
         return list(self._tools.keys())
 
 
-# Global singleton
+# ═══════════════════════════════════════════════════════════
+# GLOBAL SINGLETON
+# ═══════════════════════════════════════════════════════════
+
 _registry: ToolRegistry | None = None
 
 
@@ -800,5 +608,4 @@ def get_tool_registry() -> ToolRegistry:
         _registry.register(MemorySaveTool())
         _registry.register(CreateProjectTool())
         _registry.register(SaveCheckpointTool())
-        _registry.register(ServerRestartTool())
     return _registry
