@@ -1,63 +1,112 @@
 import { useEffect, useState } from 'react'
-import { FolderOpen, Plus, CheckCircle2, Circle } from 'lucide-react'
-import { getProjects } from '../../lib/api'
+import { FolderOpen, File, ChevronRight, Folder, RefreshCw } from 'lucide-react'
+import { useAppStore } from '../../stores/appStore'
 
-interface Project {
-  id: string;
-  name: string;
-  description: string;
-  status: string;
+interface FileEntry {
+  name: string
+  isDir: boolean
+  path: string
+  size: number
 }
 
 export default function WorkspacePanel() {
-  const [projects, setProjects] = useState<Project[]>([])
+  const [files, setFiles] = useState<FileEntry[]>([])
+  const [loading, setLoading] = useState(false)
+  const [currentPath, setCurrentPath] = useState('workspace/projects')
+  const [error, setError] = useState('')
 
-  useEffect(() => {
-    getProjects().then((res) => setProjects(res.projects || [])).catch(() => {})
-  }, [])
+  const fetchFiles = async (path: string) => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/workspace?status=`)
+      const data = await res.json()
+      const projects = (data.projects || []).map((p: any) => ({
+        name: p.name || p.slug,
+        isDir: true,
+        path: `workspace/projects/${p.slug}`,
+        size: 0,
+      }))
+      setFiles(projects)
+    } catch {
+      setError('Cannot connect to workspace')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchFiles(currentPath) }, [])
+
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return ''
+    if (bytes < 1024) return `${bytes}B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+  }
 
   return (
-    <div className="h-full overflow-y-auto p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <FolderOpen size={20} className="text-kernel-400" />
-          工作区
-        </h2>
-        <button className="btn-secondary text-sm flex items-center gap-1">
-          <Plus size={14} />
-          新建项目
-        </button>
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <FolderOpen size={16} className="text-kernel-400" />
+          <h3 className="text-sm font-medium text-gray-300">Workspace</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-gray-600">{currentPath}</span>
+          <button
+            onClick={() => fetchFiles(currentPath)}
+            className="text-gray-600 hover:text-gray-400 transition-colors"
+          >
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
-      {projects.length === 0 ? (
-        <div className="text-center text-gray-500 py-12">
-          <FolderOpen size={48} className="mx-auto mb-4 text-gray-700" />
-          <p>还没有项目</p>
-          <p className="text-sm mt-1">在聊天中告诉 AI 你想做什么，它会自动创建项目</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {projects.map((p) => (
-            <div key={p.id} className="card hover:border-gray-700 cursor-pointer transition-colors">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-medium">{p.name}</h3>
-                  <p className="text-sm text-gray-500 mt-1">{p.description}</p>
-                </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${
-                  p.status === 'active' ? 'bg-green-900/50 text-green-400' : 'bg-gray-800 text-gray-500'
-                }`}>
-                  {p.status}
-                </span>
+      {/* File listing */}
+      <div className="flex-1 overflow-y-auto">
+        {error && (
+          <div className="text-xs text-red-400 px-4 py-2">{error}</div>
+        )}
+
+        {loading ? (
+          <div className="text-xs text-gray-600 text-center py-8">Loading...</div>
+        ) : files.length === 0 ? (
+          <div className="text-center py-8 text-gray-600">
+            <Folder size={32} className="mx-auto mb-2 text-gray-700" />
+            <p className="text-sm">No projects yet</p>
+            <p className="text-xs mt-1">Create one by chatting with the CEO Agent</p>
+          </div>
+        ) : (
+          <div className="py-1">
+            {files.map((f, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-2 px-4 py-1.5 hover:bg-gray-800/50 cursor-pointer transition-colors text-xs"
+              >
+                {f.isDir ? (
+                  <Folder size={14} className="text-kernel-400 flex-shrink-0" />
+                ) : (
+                  <File size={14} className="text-gray-500 flex-shrink-0" />
+                )}
+                <span className="text-gray-300 truncate flex-1">{f.name}</span>
+                {f.size > 0 && (
+                  <span className="text-gray-700 flex-shrink-0">{formatSize(f.size)}</span>
+                )}
+                {f.isDir && (
+                  <ChevronRight size={12} className="text-gray-700 flex-shrink-0" />
+                )}
               </div>
-              <div className="mt-3 flex items-center gap-4 text-xs text-gray-600">
-                <span className="flex items-center gap-1"><CheckCircle2 size={12} /> 0 任务</span>
-                <span className="flex items-center gap-1"><Circle size={12} /> 0 进行中</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="border-t border-gray-800 px-4 py-2 flex items-center justify-between text-[10px] text-gray-700 flex-shrink-0">
+        <span>{files.length} items</span>
+        <span>{files.filter(f => f.isDir).length} projects</span>
+      </div>
     </div>
   )
 }

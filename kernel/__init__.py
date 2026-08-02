@@ -93,6 +93,11 @@ from kernel.skill_executor import (
     SkillExecutor,
     get_skill_executor,
 )
+# Sprint 8
+from kernel.plugin_runtime import (
+    PluginRuntime,
+    get_plugin_runtime,
+)
 
 __all__ = [
     "Config", "get_config", "set_config",

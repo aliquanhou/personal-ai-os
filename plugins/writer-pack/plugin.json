@@ -1,0 +1,12 @@
+{
+  "name": "writer-pack",
+  "version": "1.0.0",
+  "display_name": "Writing & Content Pack",
+  "description": "Technical writing, content creation, and documentation tools. For writing_agent.",
+  "author": "Personal AI OS Core",
+  "category": "writing",
+  "skills": ["technical_writing", "content_writing"],
+  "target_agents": ["writing_agent"],
+  "enabled": true,
+  "min_os_version": "0.7.0"
+}

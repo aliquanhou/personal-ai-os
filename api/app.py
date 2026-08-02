@@ -62,6 +62,7 @@ from kernel.skill_registry import (
 )
 from kernel.skill_router import get_skill_router
 from kernel.skill_executor import get_skill_executor
+from kernel.plugin_runtime import get_plugin_runtime
 from memory.manager import get_memory
 from tools.registry import get_tool_registry
 
@@ -221,6 +222,12 @@ async def startup():
     logger.info("Skill Registry: %s skills loaded, %s agent assignments",
                 skill_registry.get_total_skill_count(),
                 skill_registry.get_stats()["agents_with_skills"])
+
+    # Sprint 8: Initialize Plugin System
+    plugin_runtime = get_plugin_runtime()
+    discovered = plugin_runtime.discover()
+    activated = plugin_runtime.activate_all()
+    logger.info("Plugin Runtime: %d discovered, %d activated", len(discovered), activated["activated"])
 
 
 # ── Models ─────────────────────────────────────────────
@@ -1382,6 +1389,61 @@ async def compile_skill_prompt(agent_name: str):
     """Preview the compiled skill prompt for an agent."""
     prompt = get_skill_registry().compile_skill_prompt(agent_name)
     return {"agent": agent_name, "prompt": prompt}
+
+
+# ── Sprint 8: Plugin Marketplace ──────────────────────
+
+@app.get("/api/plugins")
+async def list_plugins():
+    """List all discovered plugins."""
+    runtime = get_plugin_runtime()
+    return {"plugins": runtime.list_all()}
+
+
+@app.get("/api/plugins/{plugin_name}")
+async def get_plugin(plugin_name: str):
+    """Get a single plugin manifest."""
+    runtime = get_plugin_runtime()
+    p = runtime.get(plugin_name)
+    if not p:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_name}")
+    return p
+
+
+@app.post("/api/plugins/{plugin_name}/install")
+async def install_plugin(plugin_name: str):
+    """Enable a plugin and activate its skills."""
+    runtime = get_plugin_runtime()
+    ok = runtime.install(plugin_name)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_name}")
+    return {"status": "installed", "plugin": plugin_name}
+
+
+@app.post("/api/plugins/{plugin_name}/uninstall")
+async def uninstall_plugin(plugin_name: str):
+    """Disable a plugin and deactivate its skills."""
+    runtime = get_plugin_runtime()
+    ok = runtime.uninstall(plugin_name)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_name}")
+    return {"status": "uninstalled", "plugin": plugin_name}
+
+
+@app.get("/api/plugins/{plugin_name}/agents")
+async def get_plugin_agents(plugin_name: str):
+    """Get agents targeted by a plugin."""
+    from kernel.skill_registry import get_skill_registry
+    runtime = get_plugin_runtime()
+    p = runtime.get(plugin_name)
+    if not p:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_name}")
+    agents = p.get("target_agents", [])
+    reg = get_skill_registry()
+    result = {}
+    for a in agents:
+        result[a] = {"skills": reg.get_agent_skill_names(a)}
+    return {"plugin": plugin_name, "agents": result}
 
 
 # ── Static Files (Studio) ──────────────────────────────

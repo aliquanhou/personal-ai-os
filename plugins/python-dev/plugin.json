@@ -1,0 +1,20 @@
+{
+  "name": "python-dev",
+  "version": "1.0.0",
+  "display_name": "Python Development Pack",
+  "description": "Full-stack Python development tools: backend API, database design, testing, code review, deployment. For coding_agent.",
+  "author": "Personal AI OS Core",
+  "category": "development",
+  "skills": [
+    "python_backend",
+    "database_design",
+    "testing",
+    "code_review",
+    "devops_deployment"
+  ],
+  "target_agents": [
+    "coding_agent"
+  ],
+  "enabled": true,
+  "min_os_version": "0.7.0"
+}

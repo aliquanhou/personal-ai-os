@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Bot, MessageSquare, FolderOpen, Brain, PanelLeftClose, PanelLeft, GitBranch } from 'lucide-react'
+import { Bot, MessageSquare, FolderOpen, Brain, PanelLeftClose, PanelLeft, GitBranch, Package } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { listAgents, Agent } from '../../lib/api'
 import ChatPanel from '../chat/ChatPanel'
 import WorkspacePanel from '../workspace/WorkspacePanel'
 import MemoryViewer from '../memory_viewer/MemoryViewer'
 import TaskTimeline from '../timeline/TaskTimeline'
+import PluginPanel from '../plugins/PluginPanel'
 
 export default function Sidebar() {
   const { currentAgent, setCurrentAgent, sidebarOpen, toggleSidebar, activeTab, setActiveTab } = useAppStore()
@@ -34,6 +35,7 @@ export default function Sidebar() {
             { id: 'workspace' as const, icon: FolderOpen, label: '工作区' },
             { id: 'memory' as const, icon: Brain, label: '记忆' },
             { id: 'timeline' as const, icon: GitBranch, label: 'Timeline' },
+            { id: 'plugins' as const, icon: Package, label: 'Plugins' },
             { id: 'agents' as const, icon: Bot, label: 'Agents' },
           ].map(({ id, icon: Icon, label }) => (
             <button
@@ -78,6 +80,7 @@ export default function Sidebar() {
             {activeTab === 'workspace' && '📁 工作区'}
             {activeTab === 'memory' && '🧠 记忆系统'}
             {activeTab === 'timeline' && '⏱️ 任务时间线'}
+            {activeTab === 'plugins' && '📦 插件管理'}
             {activeTab === 'agents' && '🤖 智能体'}
           </span>
         </div>
@@ -88,6 +91,7 @@ export default function Sidebar() {
           {activeTab === 'workspace' && <WorkspacePanel />}
           {activeTab === 'memory' && <MemoryViewer />}
           {activeTab === 'timeline' && <TaskTimeline />}
+          {activeTab === 'plugins' && <PluginPanel />}
           {activeTab === 'agents' && <AgentsPanel />}
         </div>
       </div>

@@ -1,0 +1,12 @@
+{
+  "name": "research-pack",
+  "version": "1.0.0",
+  "display_name": "Research & Analysis Pack",
+  "description": "Market research, competitor analysis, and strategic planning tools. For research_agent.",
+  "author": "Personal AI OS Core",
+  "category": "research",
+  "skills": ["market_research"],
+  "target_agents": ["research_agent"],
+  "enabled": true,
+  "min_os_version": "0.7.0"
+}
