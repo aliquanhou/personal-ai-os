@@ -41,3 +41,4 @@ workspace/projects/**/backups/
 htmlcov/
 .coverage
 *.db
+workspace/projects/v1-demo-*
