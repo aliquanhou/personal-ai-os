@@ -1,0 +1,309 @@
+{
+  "name": "Skill Benchmark v0.1",
+  "description": "Validates Skill Router accuracy, Skill Rating stability, and Agent collaboration. 32 test cases across 3 agent types × 8 skills × capability gap scenarios.",
+  "version": "0.1.0",
+
+  "cases": [
+    {
+      "id": "C01",
+      "category": "coding",
+      "input": "创建一个 FastAPI 用户认证系统，包含 JWT token 签发、验证、refresh 机制",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["python_backend"],
+      "required_capabilities": ["code_generation", "api_design"],
+      "note": "纯后端API开发，应匹配python_backend"
+    },
+    {
+      "id": "C02",
+      "category": "coding",
+      "input": "设计一个电商系统的数据库 Schema，包含用户、商品、订单、支付四张表",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["database_design", "python_backend"],
+      "required_capabilities": ["code_generation", "design"],
+      "note": "数据库设计任务，需database_design技能"
+    },
+    {
+      "id": "C03",
+      "category": "coding",
+      "input": "优化 React Dashboard 页面性能，减少不必要的 re-render，使用 useMemo 和 useCallback",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["frontend_react"],
+      "required_capabilities": ["code_generation", "design"],
+      "note": "纯前端性能优化"
+    },
+    {
+      "id": "C04",
+      "category": "coding",
+      "input": "为支付模块编写完整的 pytest 单元测试，覆盖正常流程、边界条件、异常处理",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["testing"],
+      "required_capabilities": ["code_generation", "code_review"],
+      "note": "测试编写任务"
+    },
+    {
+      "id": "C05",
+      "category": "coding",
+      "input": "审查这段代码的安全漏洞：检查 SQL 注入、XSS、CSRF、敏感信息泄露",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["code_review"],
+      "required_capabilities": ["code_review", "code_debug", "analysis"],
+      "note": "代码安全审查"
+    },
+    {
+      "id": "C06",
+      "category": "coding",
+      "input": "配置 Docker Compose 部署 FastAPI 应用：包含应用容器、PostgreSQL、Redis、Nginx 反代",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["devops_deployment", "python_backend"],
+      "required_capabilities": ["code_generation", "shell_exec"],
+      "note": "运维部署任务"
+    },
+    {
+      "id": "C07",
+      "category": "coding",
+      "input": "开发一个完整 REST API：用户注册、登录、个人资料 CRUD、头像上传",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["python_backend", "database_design", "testing"],
+      "required_capabilities": ["code_generation", "api_design"],
+      "note": "全栈后端任务，涉及多个技能"
+    },
+    {
+      "id": "C08",
+      "category": "coding",
+      "input": "写一个 React 组件库：Button、Input、Modal、Table、Form，支持 TypeScript 类型导出",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["frontend_react"],
+      "required_capabilities": ["code_generation", "design"],
+      "note": "纯前端组件库开发"
+    },
+    {
+      "id": "C09",
+      "category": "coding",
+      "input": "修复生产环境数据库连接池耗尽的 Bug，增加连接复用和超时重试机制",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["code_review", "python_backend"],
+      "required_capabilities": ["code_debug", "code_generation"],
+      "note": "Bug修复 + 代码审查"
+    },
+    {
+      "id": "C10",
+      "category": "coding",
+      "input": "设置 GitHub Actions CI/CD：自动运行 pytest、构建 Docker 镜像、推送到 AWS ECR",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["devops_deployment"],
+      "required_capabilities": ["shell_exec", "code_generation"],
+      "note": "CI/CD 配置任务"
+    },
+    {
+      "id": "C11",
+      "category": "coding",
+      "input": "为现有 FastAPI 项目增加 Alembic 数据库迁移：添加用户偏好表和项目标签表",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["database_design", "python_backend"],
+      "required_capabilities": ["code_generation", "design"],
+      "note": "数据库迁移任务"
+    },
+    {
+      "id": "C12",
+      "category": "coding",
+      "input": "重构遗留代码：把一个 2000 行的 God Class 拆分为职责单一的 Service 层",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["code_review", "python_backend"],
+      "required_capabilities": ["code_review", "code_generation"],
+      "note": "代码重构 + 审查"
+    },
+    {
+      "id": "R01",
+      "category": "research",
+      "input": "分析 2026 年中国新能源汽车市场竞争格局：主要玩家、市场份额、技术路线对比",
+      "expected_agent": "research_agent",
+      "expected_skills": ["market_research"],
+      "required_capabilities": ["research", "analysis", "strategy"],
+      "note": "经典市场研究任务"
+    },
+    {
+      "id": "R02",
+      "category": "research",
+      "input": "调研 AI Agent 框架：LangGraph vs AutoGen vs CrewAI 的架构对比、适用场景、社区活跃度",
+      "expected_agent": "research_agent",
+      "expected_skills": ["market_research"],
+      "required_capabilities": ["research", "analysis"],
+      "note": "技术调研，应走research_agent"
+    },
+    {
+      "id": "R03",
+      "category": "research",
+      "input": "研究全球 SaaS 定价策略：freemium、usage-based、per-seat、hybrid 模式的优缺点和适用条件",
+      "expected_agent": "research_agent",
+      "expected_skills": ["market_research"],
+      "required_capabilities": ["research", "analysis", "strategy"],
+      "note": "商业模式研究"
+    },
+    {
+      "id": "R04",
+      "category": "research",
+      "input": "撰写一份 RAG 技术现状调查报告：主流架构、向量数据库对比、准确率基准测试",
+      "expected_agent": "writing_agent",
+      "expected_skills": ["technical_writing"],
+      "required_capabilities": ["writing", "research"],
+      "note": "技术报告撰写 — 写作输出任务，路由到 writing_agent(technical_writing)"
+    },
+    {
+      "id": "R05",
+      "category": "research",
+      "input": "竞品分析：找出 5 个 AI 客服 SaaS 产品，对比功能、定价、目标客户、差异化优势",
+      "expected_agent": "research_agent",
+      "expected_skills": ["market_research"],
+      "required_capabilities": ["research", "analysis", "strategy"],
+      "note": "竞品分析任务"
+    },
+    {
+      "id": "W05",
+      "category": "writing",
+      "input": "编写 Personal AI OS 的技术架构文档：包含系统概述、模块图、数据流、部署指南",
+      "expected_agent": "writing_agent",
+      "expected_skills": ["technical_writing"],
+      "required_capabilities": ["writing", "file_ops"],
+      "note": "纯技术文档撰写 — 应路由到 writing_agent(technical_writing)"
+    },
+    {
+      "id": "W01",
+      "category": "writing",
+      "input": "写一篇关于 AI Agent 未来发展趋势的技术博客文章，面向开发者读者",
+      "expected_agent": "writing_agent",
+      "expected_skills": ["content_writing"],
+      "required_capabilities": ["writing", "file_ops"],
+      "note": "技术博客写作 — 应路由到 writing_agent(content_writing)"
+    },
+    {
+      "id": "W02",
+      "category": "writing",
+      "input": "撰写 Personal AI OS v1.0 的产品发布公告，包含核心功能、技术亮点、快速开始指南",
+      "expected_agent": "writing_agent",
+      "expected_skills": ["content_writing"],
+      "required_capabilities": ["writing", "file_ops"],
+      "note": "产品公告写作 — 应路由到 writing_agent(content_writing)"
+    },
+    {
+      "id": "W03",
+      "category": "writing",
+      "input": "为 FastAPI 项目生成 API 文档：所有端点、请求/响应格式、认证方式、错误码说明",
+      "expected_agent": "writing_agent",
+      "expected_skills": ["technical_writing"],
+      "required_capabilities": ["writing", "file_ops"],
+      "note": "API 文档生成 — 应路由到 writing_agent(technical_writing)"
+    },
+    {
+      "id": "W04",
+      "category": "writing",
+      "input": "编写一份面向投资人的 Pitch Deck 文字稿：产品定位、市场规模、竞争壁垒、财务预测",
+      "expected_agent": "writing_agent",
+      "expected_skills": ["content_writing"],
+      "required_capabilities": ["writing"],
+      "note": "商业文案写作 — 应路由到 writing_agent(content_writing)"
+    },
+    {
+      "id": "G01",
+      "category": "gap",
+      "input": "写一个股票交易系统，并部署到生产环境",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["python_backend", "database_design", "devops_deployment", "testing"],
+      "required_capabilities": ["code_generation", "api_design", "shell_exec"],
+      "note": "能力缺口：writing_agent 没有开发+部署能力，应推荐 coding_agent",
+      "deficient_agent": "writing_agent"
+    },
+    {
+      "id": "G02",
+      "category": "gap",
+      "input": "市场调研 + 用 React 做一个数据可视化 Dashboard 展示结果",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["frontend_react"],
+      "required_capabilities": ["design", "code_generation", "research"],
+      "note": "research_agent 无前端能力，gap detection 应发现 code_generation 缺口",
+      "deficient_agent": "research_agent",
+      "expect_gap": true
+    },
+    {
+      "id": "G03",
+      "category": "gap",
+      "input": "写一篇技术文章，并自动推送到多个社交媒体平台",
+      "expected_agent": "writing_agent",
+      "expected_skills": ["technical_writing"],
+      "required_capabilities": ["writing", "social_media_management", "seo_optimization"],
+      "note": "能力缺口：没有社交媒体发布 skill，应输出 gap alert",
+      "deficient_agent": "writing_agent",
+      "expect_gap": true
+    },
+    {
+      "id": "M01",
+      "category": "multi_agent",
+      "input": "开发一个 AI 客服系统：包括 FastAPI 后端、React 管理后台、数据库设计、Docker 部署、用户文档",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["python_backend", "frontend_react", "database_design", "devops_deployment"],
+      "required_capabilities": ["code_generation", "api_design", "design", "shell_exec"],
+      "note": "多 Agent 协作任务：开发 + 文档 + 部署"
+    },
+    {
+      "id": "M02",
+      "category": "multi_agent",
+      "input": "研究 AI 编程助手市场 → 设计产品方案 → 开发 MVP → 写发布文章 → 部署上线",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["python_backend", "devops_deployment"],
+      "required_capabilities": ["code_generation", "shell_exec", "research", "analysis", "writing"],
+      "note": "完整产品流程 — coding_agent 技能覆盖面最广"
+    },
+    {
+      "id": "E01",
+      "category": "edge",
+      "input": "hello world",
+      "expected_agent": "ceo",
+      "expected_skills": [],
+      "required_capabilities": [],
+      "note": "边界测试：无意义输入，不应匹配任何专业技能"
+    },
+    {
+      "id": "E02",
+      "category": "edge",
+      "input": "",
+      "expected_agent": "",
+      "expected_skills": [],
+      "required_capabilities": [],
+      "note": "空输入"
+    },
+    {
+      "id": "E03",
+      "category": "edge",
+      "input": "我需要同时具备：写代码 + 市场分析 + 写文章 + 部署 + 数据库设计 + 前端开发 + 测试 + 安全审查",
+      "required_capabilities": ["code_generation", "research", "writing", "shell_exec", "design", "code_review"],
+      "expected_agent": "coding_agent",
+      "expected_skills": ["python_backend", "database_design", "testing", "code_review", "devops_deployment", "frontend_react"],
+      "note": "超级任务：需要几乎所有技能，应返回最高技能覆盖率的 Agent"
+    },
+    {
+      "id": "E04",
+      "category": "edge",
+      "input": "给我写一段 Python 代码，只输出代码，不要任何解释",
+      "expected_agent": "coding_agent",
+      "expected_skills": ["python_backend"],
+      "required_capabilities": ["code_generation"],
+      "note": "极简代码生成"
+    },
+    {
+      "id": "E05",
+      "category": "edge",
+      "input": "帮我理解量子计算的基本原理，用通俗的语言解释",
+      "expected_agent": "research_agent",
+      "expected_skills": ["market_research"],
+      "required_capabilities": ["research", "analysis"],
+      "note": "纯研究/解释任务"
+    }
+  ],
+
+  "metrics": {
+    "target_router_accuracy": 0.70,
+    "target_confidence_calibration": 0.80,
+    "skill_rating_iterations": 100,
+    "gap_detection_required": true,
+    "multi_agent_chain_required": true
+  }
+}

@@ -443,6 +443,23 @@ class SkillRegistry:
                 created_at=now,
             ),
             SkillDefinition(
+                name="content_writing",
+                display_name="Content Writing",
+                description="撰写博客文章、产品文案、营销内容和社交媒体帖子",
+                capabilities=["writing", "file_ops"],
+                prompt_fragment=(
+                    "你是内容创作专家。\n"
+                    "- 撰写引人入胜的博客文章和社交媒体内容\n"
+                    "- 产品发布公告和营销文案\n"
+                    "- 面向不同受众调整写作风格\n"
+                    "- SEO 友好的内容结构\n"
+                    "- 使用 Markdown 格式输出"
+                ),
+                recommended_tools=["write_file", "search_memory"],
+                category="writing", difficulty="beginner",
+                created_at=now,
+            ),
+            SkillDefinition(
                 name="code_review",
                 display_name="Code Review",
                 description="代码审查：发现 Bug、安全问题和改进建议",
@@ -490,10 +507,10 @@ class SkillRegistry:
             "testing", "code_review", "devops_deployment",
         ])
         self.assign_to_agent("research_agent", [
-            "market_research", "technical_writing",
+            "market_research",
         ])
         self.assign_to_agent("writing_agent", [
-            "technical_writing",
+            "technical_writing", "content_writing",
         ])
         self.assign_to_agent("project_manager", [])  # PM relies on orchestration, not skills
         self.assign_to_agent("ceo", [])  # CEO delegates, doesn't execute skills
@@ -520,7 +537,7 @@ class SkillRegistry:
         if not path.exists():
             return
         try:
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8"))
             self._agent_skills = data.get("agent_skills", {})
             for name, sd in data.get("skills", {}).items():
                 skill = SkillDefinition(
