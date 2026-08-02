@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Wrench, User, Bot, Brain, GitBranch } from 'lucide-react'
+import { Send, Loader2, Wrench, User, Bot, Brain, GitBranch, History, Plus } from 'lucide-react'
 import { useAppStore, nextId } from '../../stores/appStore'
 import { sendMessage } from '../../lib/api'
 
@@ -16,14 +16,29 @@ export default function ChatPanel() {
     messages, addMessage,
     isLoading, setLoading,
     currentAgent,
+    loadSession, saveCurrentSession, newSession,
+    savedSessions, loadSavedSessions,
   } = useAppStore()
 
   const [input, setInput] = useState('')
   const [elapsed, setElapsed] = useState(0)
   const [statusIdx, setStatusIdx] = useState(0)
+  const [historyLoaded, setHistoryLoaded] = useState(false)
   const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Restore session on mount
+  useEffect(() => {
+    if (historyLoaded) return
+    const stored = localStorage.getItem('paios_current_session')
+    if (stored) {
+      loadSession(stored)
+      setHistoryLoaded(true)
+    } else {
+      setHistoryLoaded(true)
+    }
+  }, [loadSession, historyLoaded])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -76,6 +91,7 @@ export default function ChatPanel() {
         iterations: result.iterations,
       }
       addMessage(assistantMsg)
+      saveCurrentSession()  // persist after each exchange
     } catch (err: any) {
       addMessage({
         id: nextId(),
@@ -97,6 +113,34 @@ export default function ChatPanel() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Session bar */}
+      {savedSessions.length > 0 && (
+        <div className="flex-shrink-0 border-b border-gray-800 px-4 py-2 flex items-center gap-2 overflow-x-auto">
+          <History size={12} className="text-gray-600 flex-shrink-0" />
+          {savedSessions.slice(0, 8).map(s => (
+            <button
+              key={s.id}
+              onClick={() => loadSession(s.id)}
+              className={`text-[11px] px-2 py-1 rounded whitespace-nowrap transition-colors ${
+                sessionId === s.id
+                  ? 'bg-kernel-600/20 text-kernel-400'
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+              }`}
+              title={s.label}
+            >
+              {s.label.slice(0, 20)}
+            </button>
+          ))}
+          <button
+            onClick={newSession}
+            className="text-[11px] px-2 py-1 rounded text-gray-500 hover:text-gray-300 hover:bg-gray-800 flex items-center gap-1 flex-shrink-0 ml-auto"
+            title="新对话"
+          >
+            <Plus size={12} /> 新
+          </button>
+        </div>
+      )}
+
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {messages.length === 0 && (
