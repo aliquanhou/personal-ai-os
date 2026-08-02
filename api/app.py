@@ -50,8 +50,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Personal AI OS",
-    description="Your personal AI operating system — AI Company Organization",
-    version="0.3.0",
+    description="Your personal AI operating system — AI Company Runtime",
+    version="0.4.0",
 )
 
 app.add_middleware(
@@ -264,7 +264,7 @@ class ProjectCreate(BaseModel):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.3.0", "name": "Personal AI OS"}
+    return {"status": "ok", "version": "0.4.0", "name": "Personal AI OS"}
 
 
 # ── Routes: Chat ───────────────────────────────────────
