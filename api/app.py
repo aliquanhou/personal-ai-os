@@ -1333,12 +1333,33 @@ async def agent_skill_gap_analysis(agent_name: str, req: SkillRecommendRequest):
 
 
 @app.post("/api/skills/{skill_name}/record")
-async def record_skill_usage(skill_name: str, success: bool, duration_ms: float):
-    """Record a skill execution for rating."""
-    ok = get_skill_registry().record_skill_use(skill_name, success, duration_ms)
+async def record_skill_usage(skill_name: str, success: bool, duration_ms: float,
+                             planning: bool | None = None,
+                             code_gen: bool | None = None,
+                             validation: bool | None = None,
+                             deployment: bool | None = None):
+    """Record a skill execution with optional per-phase scoring.
+
+    Phases (all optional):
+      - planning: True/False — did the agent plan correctly?
+      - code_gen: True/False — did the generated artifact work?
+      - validation: True/False — did verification/tests pass?
+      - deployment: True/False — did it run in target environment?
+    """
+    phases = {}
+    if planning is not None:
+        phases["planning"] = planning
+    if code_gen is not None:
+        phases["code_gen"] = code_gen
+    if validation is not None:
+        phases["validation"] = validation
+    if deployment is not None:
+        phases["deployment"] = deployment
+
+    ok = get_skill_registry().record_skill_use(skill_name, success, duration_ms, phases=phases if phases else None)
     if not ok:
         raise HTTPException(status_code=404, detail=f"Skill not found: {skill_name}")
-    return {"status": "recorded"}
+    return {"status": "recorded", "phases": phases}
 
 
 @app.post("/api/skills/compile-prompt/{agent_name}")

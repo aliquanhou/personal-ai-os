@@ -53,6 +53,7 @@ class ApprovalResult:
 RISK_RULES = {
     "safe": ApprovalResult(blocked=False, needs_approval=False, reason=""),
     "moderate": ApprovalResult(blocked=False, needs_approval=False, reason="Auto-approved: moderate risk"),
+    "workspace_safe": ApprovalResult(blocked=False, needs_approval=False, reason="Auto-approved: workspace scoped"),
     "dangerous": ApprovalResult(blocked=False, needs_approval=True, reason="需要人工批准：高风险操作"),
     "critical": ApprovalResult(blocked=False, needs_approval=True, reason="需要人工批准：关键操作"),
 }
@@ -64,6 +65,26 @@ DANGEROUS_PATTERNS = [
 CRITICAL_COMMANDS = [
     "rm -rf /", "DROP TABLE", "DELETE FROM", "shutdown",
     "format C:", "del /f /s C:\\", "DROP DATABASE",
+]
+
+# Sprint 6.6: Commands that are safe within workspace/projects/
+WORKSPACE_SAFE_COMMANDS = [
+    "pytest", "python ", "python3 ", "npm test", "npm run", "pip install",
+    "git status", "git diff", "git log", "git add", "git commit",
+    "ls ", "cat ", "head ", "tail ", "wc ", "find ", "grep ",
+    "echo ", "which ", "pwd", "mkdir ", "touch ",
+    "curl http://localhost", "curl http://127.0.0.1",
+    "cd /d/claude/personal-ai-os/workspace",
+    "cd workspace", "cd projects",
+]
+
+# Sprint 6.6: Commands that are never allowed even in workspace
+SYSTEM_RISK_COMMANDS = [
+    "pip install --global", "npm install -g", "sudo ", "su ",
+    "git push", "git reset --hard origin", "git clean -fd",
+    "chmod 777", "chown ", "systemctl ", "service ",
+    "apt-get", "yum ", "brew ", "docker rm", "docker system prune",
+    "rm ", "mv /", "cp /", "> /dev/",
 ]
 
 
@@ -240,7 +261,7 @@ On Windows: commands run through bash (Git Bash). Use Unix-style syntax:
             },
             category="process",
             permission_level="execute",
-            risk_level="dangerous",
+            risk_level="workspace_safe",
         )
 
     async def execute(self, command: str = "", timeout: int = 30) -> ToolResult:
@@ -680,14 +701,34 @@ class ToolRegistry:
         if name == "shell":
             command = args.get("command", "")
             cl = command.lower()
+
+            # Layer 1: Block critical commands (never allowed)
             for pattern in CRITICAL_COMMANDS:
                 if pattern.lower() in cl:
                     return ApprovalResult(blocked=True, needs_approval=False,
                                          reason=f"禁止：命令包含危险操作 '{pattern}'")
-            for pattern in DANGEROUS_PATTERNS:
+            for pattern in SYSTEM_RISK_COMMANDS:
                 if pattern.lower() in cl:
-                    risk = "dangerous"
+                    return ApprovalResult(blocked=False, needs_approval=True,
+                                         reason=f"需要批准：系统级操作 '{pattern}'")
+
+            # Layer 2: Auto-approve workspace-safe commands
+            # (pytest, python scripts, git status, npm test, etc.)
+            for pattern in WORKSPACE_SAFE_COMMANDS:
+                if cl.startswith(pattern.lower()):
+                    risk = "workspace_safe"
                     break
+            else:
+                # Check: is the command scoped to workspace?
+                workspace_paths = ["workspace/", "workspace\\", "projects/"]
+                if any(wp in cl for wp in workspace_paths):
+                    risk = "workspace_safe"
+                # Not workspace-safe — check for dangerous patterns
+                else:
+                    for pattern in DANGEROUS_PATTERNS:
+                        if pattern.lower() in cl:
+                            risk = "dangerous"
+                            break
 
         if name == "write_file":
             path = args.get("path", "")

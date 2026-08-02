@@ -47,12 +47,53 @@ class SkillDifficulty(StrEnum):
 
 @dataclass
 class SkillRating:
-    """Independent rating for a single skill."""
+    """Multi-dimensional rating for a single skill.
+
+    Sprint 6.6: Split from binary success/failure into 4 phases:
+      - planning: did the agent choose the right approach?
+      - code_gen: did the generated artifact work?
+      - validation: did tests/verification pass?
+      - deployment: did it run successfully in target environment?
+
+    Composite score weights vary by skill category.
+    """
     total_uses: int = 0
     successful_uses: int = 0
     failed_uses: int = 0
     avg_duration_ms: float = 0.0
-    reputation_score: float = 0.5  # 0.0–1.0
+    reputation_score: float = 0.5
+
+    # Sprint 6.6: Phase-level tracking
+    planning_ok: int = 0          # Agent planned correctly
+    planning_total: int = 0
+    code_gen_ok: int = 0          # Generated artifact was correct
+    code_gen_total: int = 0
+    validation_ok: int = 0        # Tests/verification passed
+    validation_total: int = 0
+    deployment_ok: int = 0        # Ran successfully in target env
+    deployment_total: int = 0
+    human_interventions: int = 0  # How many times human had to step in
+
+    def _phase_rate(self, ok: int, total: int) -> float:
+        if total == 0:
+            return 0.5  # Neutral — no data yet
+        return ok / total
+
+    @property
+    def planning_rate(self) -> float:
+        return self._phase_rate(self.planning_ok, self.planning_total)
+
+    @property
+    def code_gen_rate(self) -> float:
+        return self._phase_rate(self.code_gen_ok, self.code_gen_total)
+
+    @property
+    def validation_rate(self) -> float:
+        return self._phase_rate(self.validation_ok, self.validation_total)
+
+    @property
+    def deployment_rate(self) -> float:
+        return self._phase_rate(self.deployment_ok, self.deployment_total)
 
     @property
     def success_rate(self) -> float:
@@ -73,19 +114,82 @@ class SkillRating:
             return "C"
         return "D"
 
-    def record(self, success: bool, duration_ms: float) -> None:
+    @property
+    def weakest_phase(self) -> str:
+        """Returns the phase with the lowest score — useful for Evolution Advisor."""
+        phases = {
+            "planning": self.planning_rate,
+            "code_gen": self.code_gen_rate,
+            "validation": self.validation_rate,
+            "deployment": self.deployment_rate,
+        }
+        return min(phases, key=phases.get)
+
+    def record(self, success: bool, duration_ms: float,
+               phases: dict | None = None) -> None:
+        """Record a skill execution.
+
+        Args:
+            success: overall success/failure
+            duration_ms: execution time
+            phases: optional dict with phase-level results
+                    {"planning": True, "code_gen": True, "validation": False, "deployment": None}
+        """
         self.total_uses += 1
         if success:
             self.successful_uses += 1
         else:
             self.failed_uses += 1
+
         self.avg_duration_ms = (
             (self.avg_duration_ms * (self.total_uses - 1) + duration_ms)
             / max(self.total_uses, 1)
         )
-        # Simple reputation: weighted towards recent, but we use cumulative for now
+
+        # Sprint 6.6: Phase-level tracking
+        if phases:
+            if "planning" in phases and phases["planning"] is not None:
+                self.planning_total += 1
+                if phases["planning"]:
+                    self.planning_ok += 1
+            if "code_gen" in phases and phases["code_gen"] is not None:
+                self.code_gen_total += 1
+                if phases["code_gen"]:
+                    self.code_gen_ok += 1
+            if "validation" in phases and phases["validation"] is not None:
+                self.validation_total += 1
+                if phases["validation"]:
+                    self.validation_ok += 1
+            if "deployment" in phases and phases["deployment"] is not None:
+                self.deployment_total += 1
+                if phases["deployment"]:
+                    self.deployment_ok += 1
+        else:
+            # Legacy: if no phases provided, mark all relevant phases as this result
+            if self.code_gen_total > 0 or self.planning_total > 0:
+                # Already have data — don't assume all phases
+                pass
+            else:
+                # First use — mark code-gen and planning as this result
+                self.planning_total += 1
+                if success:
+                    self.planning_ok += 1
+                self.code_gen_total += 1
+                if success:
+                    self.code_gen_ok += 1
+
+        # Sprint 6.6: Composite score weights phases differently per category
+        # Default: all 4 phases equal weight
+        phase_scores = [
+            self.planning_rate,
+            self.code_gen_rate,
+            self.validation_rate if self.validation_total > 0 else self.planning_rate,
+            self.deployment_rate if self.deployment_total > 0 else self.planning_rate,
+        ]
+        avg_phase = sum(phase_scores) / len(phase_scores)
+
         self.reputation_score = round(
-            0.7 * self.success_rate + 0.3 * min(1.0, 30000 / max(self.avg_duration_ms, 1000)),
+            0.3 * self.success_rate + 0.5 * avg_phase + 0.2 * min(1.0, 30000 / max(self.avg_duration_ms, 1000)),
             3,
         )
 
@@ -98,6 +202,15 @@ class SkillRating:
             "avg_duration_ms": round(self.avg_duration_ms, 0),
             "reputation_score": self.reputation_score,
             "tier": self.tier,
+            # Sprint 6.6: Phase-level breakdown
+            "phases": {
+                "planning": {"rate": round(self.planning_rate, 3), "n": self.planning_total},
+                "code_gen": {"rate": round(self.code_gen_rate, 3), "n": self.code_gen_total},
+                "validation": {"rate": round(self.validation_rate, 3), "n": self.validation_total},
+                "deployment": {"rate": round(self.deployment_rate, 3), "n": self.deployment_total},
+            },
+            "weakest_phase": self.weakest_phase,
+            "human_interventions": self.human_interventions,
         }
 
 
@@ -251,12 +364,21 @@ class SkillRegistry:
 
     # ── Rating ──────────────────────────────────────────
 
-    def record_skill_use(self, skill_name: str, success: bool, duration_ms: float) -> bool:
-        """Record a skill usage for rating."""
+    def record_skill_use(self, skill_name: str, success: bool, duration_ms: float,
+                        phases: dict | None = None) -> bool:
+        """Record a skill usage for rating.
+
+        Args:
+            skill_name: which skill was used
+            success: overall success/failure
+            duration_ms: execution time
+            phases: optional phase-level breakdown
+                    {"planning": True, "code_gen": True, "validation": False, "deployment": None}
+        """
         skill = self.get_by_name(skill_name)
         if not skill:
             return False
-        skill.rating.record(success, duration_ms)
+        skill.rating.record(success, duration_ms, phases=phases)
         skill.updated_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
         self._save()
         return True
@@ -559,7 +681,18 @@ class SkillRegistry:
                     total_uses=rating_data.get("total_uses", 0),
                     successful_uses=rating_data.get("successful_uses", 0),
                     failed_uses=rating_data.get("failed_uses", 0),
+                    avg_duration_ms=rating_data.get("avg_duration_ms", 0),
                     reputation_score=rating_data.get("reputation_score", 0.5),
+                    human_interventions=rating_data.get("human_interventions", 0),
+                    # Sprint 6.6: Phase-level
+                    planning_ok=rating_data.get("planning_ok", 0),
+                    planning_total=rating_data.get("planning_total", 0),
+                    code_gen_ok=rating_data.get("code_gen_ok", 0),
+                    code_gen_total=rating_data.get("code_gen_total", 0),
+                    validation_ok=rating_data.get("validation_ok", 0),
+                    validation_total=rating_data.get("validation_total", 0),
+                    deployment_ok=rating_data.get("deployment_ok", 0),
+                    deployment_total=rating_data.get("deployment_total", 0),
                 )
                 skill.id = sd.get("id", skill.id)
                 self._skills[skill.id] = skill
