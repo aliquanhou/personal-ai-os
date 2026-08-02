@@ -405,15 +405,8 @@ class BaseAgent(ABC):
             )
 
     async def _finalize(self, lc, ctx: AgentContext, state: dict) -> None:
-        """Save to memory, checkpoint, and emit completion event."""
-        if len(state["final_output"]) > 100:
-            self.memory.save_message(
-                ctx.session_id, "assistant", state["final_output"],
-                {"agent": self.name, "iterations": lc.current_iteration,
-                 "goal_progress": lc.tracker.progress() if lc.tracker.items else None},
-            )
-            state["memory_updates"] += 1
-
+        """Save checkpoint and emit completion event. API layer handles memory save."""
+        # Note: message persistence is done by api/app.py:chat() — we only checkpoint here
         state["last_checkpoint"] = self._save_checkpoint(
             ctx, state["tool_calls"], state["checkpoint_count"], "completed")
         state["checkpoint_count"] += 1
