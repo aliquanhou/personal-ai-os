@@ -1,0 +1,9 @@
+{
+  "name": "ecommerce-ops-agent",
+  "slug": "ecommerce-ops-agent",
+  "description": "电商运营数字员工 - 自动执行订单核对、库存对账、商品资料整理、报表生成等电商运营任务",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T16:36:32.424254+00:00",
+  "updated_at": "2026-08-02T16:36:32.424254+00:00"
+}

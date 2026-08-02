@@ -12,6 +12,8 @@ The API exposes all Personal AI OS capabilities:
 - Task Graph orchestration
 """
 
+import asyncio
+import json as _json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -20,6 +22,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -323,6 +326,88 @@ class SkillRecommendRequest(BaseModel):
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": "0.4.0", "name": "Personal AI OS"}
+
+
+# ── v1.1.3: Agent Execution Event Stream (SSE) ─────────
+
+# In-memory queues per session for SSE streaming
+_event_queues: dict[str, asyncio.Queue] = {}
+_event_bus_subscribed = False
+
+
+def _ensure_event_bus_subscription():
+    """Subscribe the EventBus once to fan out events to SSE queues."""
+    global _event_bus_subscribed
+    if _event_bus_subscribed:
+        return
+    from kernel.events import get_event_bus
+
+    async def _fanout(event):
+        sid = event.data.get("session_id", "")
+        if sid and sid in _event_queues:
+            payload = {
+                "type": event.type.value,
+                "source": event.source,
+                "data": {k: str(v)[:500] if isinstance(v, (dict, list)) else v
+                         for k, v in event.data.items()
+                         if k not in ("args",)},
+                "timestamp": event.timestamp,
+            }
+            # Include args for tool calls
+            if "args" in event.data:
+                payload["args"] = {k: str(v)[:200] for k, v in event.data["args"].items()}
+            try:
+                _event_queues[sid].put_nowait(payload)
+            except asyncio.QueueFull:
+                pass  # Drop if client is slow
+
+    get_event_bus().on_any(_fanout)
+    _event_bus_subscribed = True
+
+
+@app.get("/api/events/stream")
+async def event_stream(session_id: str = ""):
+    """Server-Sent Events stream of Agent Runtime execution.
+
+    Connect with EventSource in the browser to receive real-time
+    agent lifecycle events: started, thinking, tool calls, completion.
+
+    Filter by session_id to get events for a specific conversation.
+    If no session_id, streams all events (admin mode).
+    """
+    _ensure_event_bus_subscription()
+
+    queue: asyncio.Queue = asyncio.Queue(maxsize=200)
+    key = session_id or f"broadcast_{uuid.uuid4().hex[:6]}"
+    _event_queues[key] = queue
+
+    async def generate():
+        try:
+            # Send initial connected event
+            yield f"data: {_json.dumps({'type': 'stream.connected', 'session_id': session_id or 'broadcast'}, ensure_ascii=False)}\n\n"
+
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    yield f"data: {_json.dumps(event, ensure_ascii=False)}\n\n"
+                except asyncio.TimeoutError:
+                    # Send keepalive ping
+                    yield f": ping\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            _event_queues.pop(key, None)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
 
 
 # ── Routes: Chat ───────────────────────────────────────

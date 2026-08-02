@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Wrench, User, Bot, Brain, GitBranch, History, Plus } from 'lucide-react'
+import { Send, Loader2, Wrench, User, Bot, History, Plus } from 'lucide-react'
 import { useAppStore, nextId } from '../../stores/appStore'
 import { sendMessage } from '../../lib/api'
 
@@ -209,39 +209,25 @@ export default function ChatPanel() {
         {isLoading && (
           <div className="px-4 py-3">
             <div className="bg-gray-800/50 rounded-xl px-4 py-3 border border-gray-700/50">
-              {/* Agent status header */}
-              <div className="flex items-center gap-3 mb-2">
+              <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-kernel-600/30 flex items-center justify-center">
                   <Loader2 size={16} className="animate-spin text-kernel-400" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <p className="text-sm text-gray-200 font-medium">
-                    {STATUS_PHASES[statusIdx]}
+                    Agent 正在执行任务
                   </p>
                   <p className="text-xs text-gray-500">
-                    Agent: {currentAgent} · 已运行 {elapsed}s
+                    {currentAgent} · {elapsed}s · 切换到
+                    <button
+                      onClick={() => useAppStore.getState().setActiveTab('timeline')}
+                      className="text-kernel-400 ml-1 hover:underline"
+                    >
+                      Timeline
+                    </button>
+                    {' '}查看实时过程
                   </p>
                 </div>
-              </div>
-              {/* Progress bar */}
-              <div className="w-full bg-gray-700 rounded-full h-1 mt-2 overflow-hidden">
-                <div className="bg-kernel-500 h-1 rounded-full animate-pulse"
-                  style={{ width: `${Math.min(90, elapsed * 3)}%`, transition: 'width 0.5s' }} />
-              </div>
-              {/* Phase hints */}
-              <div className="flex gap-4 mt-2 text-[10px] text-gray-600">
-                <span className="flex items-center gap-1">
-                  <Brain size={10} /> 分析
-                </span>
-                <span className="flex items-center gap-1">
-                  <GitBranch size={10} /> 计划
-                </span>
-                <span className="flex items-center gap-1">
-                  <Wrench size={10} /> 执行
-                </span>
-                <span className="flex items-center gap-1">
-                  <Bot size={10} /> 输出
-                </span>
               </div>
             </div>
           </div>

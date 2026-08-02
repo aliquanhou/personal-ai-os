@@ -1,0 +1,14 @@
+﻿sku_id,product_name,category,price,cost,status
+SKU001,iPhone 15 Pro Max 256G,手机,8999,6500,pending
+SKU002,iPhone 15 Pro 128G,手机,7999,5800,pending
+SKU003,华为 Mate 60 Pro,手机,6999,5100,on_sale
+SKU004,小米 14 Ultra,手机,5999,4300,off_sale
+SKU005,MacBook Pro 14寸,电脑,14999,11500,pending
+SKU006,iPad Pro 12.9寸,平板,8999,6800,pending
+SKU007,AirPods Pro 2,耳机,1899,1300,on_sale
+SKU008,索尼 WH-1000XM5,耳机,2499,1800,on_sale
+SKU009,戴森 V12 吸尘器,家电,3999,2800,pending
+SKU010,飞利浦电动牙刷,个护,399,220,on_sale
+SKU011,罗技 MX Master 3S,外设,699,450,off_sale
+SKU012,三星 T7 移动硬盘,存储,899,620,on_sale
+SKU001,iPhone 15 Pro Max 256G,手机,8999,6500,pending

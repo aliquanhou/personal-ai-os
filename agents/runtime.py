@@ -117,7 +117,8 @@ class BaseAgent(ABC):
 
         await self.event_bus.publish(Event(
             type=EventType.AGENT_STARTED,
-            data={"agent_id": self.id, "agent_name": self.name, "goal": ctx.goal},
+            data={"agent_id": self.id, "agent_name": self.name,
+                  "goal": ctx.goal[:200], "session_id": ctx.session_id},
             source=self.name,
         ))
 
@@ -169,7 +170,8 @@ class BaseAgent(ABC):
 
                 await self.event_bus.publish(Event(
                     type=EventType.AGENT_THINKING,
-                    data={"agent_id": self.id, "iteration": ctx.current_iteration},
+                    data={"agent_id": self.id, "iteration": ctx.current_iteration,
+                      "session_id": ctx.session_id},
                     source=self.name,
                 ))
 
@@ -192,7 +194,8 @@ class BaseAgent(ABC):
 
                         await self.event_bus.publish(Event(
                             type=EventType.TOOL_CALL_START,
-                            data={"agent_id": self.id, "tool": func_name, "args": func_args},
+                            data={"agent_id": self.id, "tool": func_name, "args": func_args,
+                                  "session_id": ctx.session_id},
                             source=self.name,
                         ))
 
