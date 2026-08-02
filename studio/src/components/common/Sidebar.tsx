@@ -25,7 +25,7 @@ export default function Sidebar() {
           <h1 className="text-lg font-bold tracking-tight">
             <span className="text-kernel-400">AI</span> OS
           </h1>
-          <p className="text-xs text-gray-600 mt-0.5">v0.1 — Personal AI Employee</p>
+          <p className="text-xs text-gray-600 mt-0.5">v1.0 — AI Chief of Staff</p>
         </div>
 
         {/* Navigation */}

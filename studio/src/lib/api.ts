@@ -1,6 +1,7 @@
-/** API client for Personal AI OS */
+/** API client for Personal AI OS v1.0 */
 
 const BASE = '/api';
+const TIMEOUT_MS = 120000; // 2 minute timeout for agent tasks
 
 export interface ChatResponse {
   session_id: string;
@@ -8,6 +9,7 @@ export interface ChatResponse {
   response: string;
   tool_calls: Array<{ tool: string; args: Record<string, unknown>; success: boolean; output: string }>;
   iterations: number;
+  checkpoint_count?: number;
 }
 
 export interface Agent {
@@ -16,13 +18,24 @@ export interface Agent {
   description: string;
 }
 
-export async function sendMessage(message: string, agent: string = 'project_manager', sessionId?: string): Promise<ChatResponse> {
-  const res = await fetch(`${BASE}/chat`, {
+async function fetchWithTimeout(url: string, options: RequestInit, timeout = TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function sendMessage(message: string, agent: string = 'ceo', sessionId?: string): Promise<ChatResponse> {
+  const res = await fetchWithTimeout(`${BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, agent, session_id: sessionId || '' }),
   });
-  if (!res.ok) throw new Error(`Chat error: ${res.status}`);
+  if (!res.ok) throw new Error(`Chat error: ${res.status} — ${await res.text()}`);
   return res.json();
 }
 

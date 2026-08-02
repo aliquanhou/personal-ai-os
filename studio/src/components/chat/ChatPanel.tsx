@@ -1,7 +1,14 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Wrench, User, Bot } from 'lucide-react'
+import { Send, Loader2, Wrench, User, Bot, Brain, GitBranch } from 'lucide-react'
 import { useAppStore, nextId } from '../../stores/appStore'
 import { sendMessage } from '../../lib/api'
+
+const STATUS_PHASES = [
+  'CEO 分析目标...',
+  '制定执行计划...',
+  'Agent 工作中...',
+  '整理结果...',
+]
 
 export default function ChatPanel() {
   const {
@@ -12,6 +19,9 @@ export default function ChatPanel() {
   } = useAppStore()
 
   const [input, setInput] = useState('')
+  const [elapsed, setElapsed] = useState(0)
+  const [statusIdx, setStatusIdx] = useState(0)
+  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -22,6 +32,26 @@ export default function ChatPanel() {
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
+
+  // Elapsed timer + rotating status during loading
+  useEffect(() => {
+    if (isLoading) {
+      setElapsed(0)
+      setStatusIdx(0)
+      elapsedRef.current = setInterval(() => {
+        setElapsed(e => e + 1)
+        setStatusIdx(s => (s + 1) % STATUS_PHASES.length)
+      }, 5000)
+    } else {
+      if (elapsedRef.current) clearInterval(elapsedRef.current)
+      elapsedRef.current = null
+      setElapsed(0)
+      setStatusIdx(0)
+    }
+    return () => {
+      if (elapsedRef.current) clearInterval(elapsedRef.current)
+    }
+  }, [isLoading])
 
   const handleSend = async () => {
     const text = input.trim()
@@ -42,6 +72,8 @@ export default function ChatPanel() {
         content: result.response,
         toolCalls: result.tool_calls,
         timestamp: Date.now(),
+        agent: result.agent,
+        iterations: result.iterations,
       }
       addMessage(assistantMsg)
     } catch (err: any) {
@@ -70,10 +102,10 @@ export default function ChatPanel() {
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 space-y-2">
             <Bot size={48} className="text-gray-700" />
-            <p className="text-lg font-medium">Personal AI OS v0.1</p>
-            <p className="text-sm">你的 AI 员工已就位，输入目标开始工作</p>
+            <p className="text-lg font-medium">Personal AI OS v1.0</p>
+            <p className="text-sm">你的 AI 团队已就位，输入目标开始工作</p>
             <div className="flex flex-wrap gap-2 mt-4">
-              {['帮我分析一个创业想法', '创建一个新项目', '搜索我的知识库'].map((hint) => (
+              {['帮我分析一个创业想法', '帮我创建一个个人博客网站', '分析AI Agent市场趋势'].map((hint) => (
                 <button
                   key={hint}
                   onClick={() => setInput(hint)}
@@ -91,9 +123,43 @@ export default function ChatPanel() {
         ))}
 
         {isLoading && (
-          <div className="flex items-center gap-2 text-gray-400 px-4">
-            <Loader2 size={16} className="animate-spin" />
-            <span className="text-sm">AI 思考中...</span>
+          <div className="px-4 py-3">
+            <div className="bg-gray-800/50 rounded-xl px-4 py-3 border border-gray-700/50">
+              {/* Agent status header */}
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-kernel-600/30 flex items-center justify-center">
+                  <Loader2 size={16} className="animate-spin text-kernel-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-200 font-medium">
+                    {STATUS_PHASES[statusIdx]}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Agent: {currentAgent} · 已运行 {elapsed}s
+                  </p>
+                </div>
+              </div>
+              {/* Progress bar */}
+              <div className="w-full bg-gray-700 rounded-full h-1 mt-2 overflow-hidden">
+                <div className="bg-kernel-500 h-1 rounded-full animate-pulse"
+                  style={{ width: `${Math.min(90, elapsed * 3)}%`, transition: 'width 0.5s' }} />
+              </div>
+              {/* Phase hints */}
+              <div className="flex gap-4 mt-2 text-[10px] text-gray-600">
+                <span className="flex items-center gap-1">
+                  <Brain size={10} /> 分析
+                </span>
+                <span className="flex items-center gap-1">
+                  <GitBranch size={10} /> 计划
+                </span>
+                <span className="flex items-center gap-1">
+                  <Wrench size={10} /> 执行
+                </span>
+                <span className="flex items-center gap-1">
+                  <Bot size={10} /> 输出
+                </span>
+              </div>
+            </div>
           </div>
         )}
 
@@ -127,7 +193,7 @@ export default function ChatPanel() {
   )
 }
 
-function MessageBubble({ msg }: { msg: { id: string; role: string; content: string; toolCalls?: any[] } }) {
+function MessageBubble({ msg }: { msg: { id: string; role: string; content: string; toolCalls?: any[]; agent?: string; iterations?: number } }) {
   const isUser = msg.role === 'user'
   const isSystem = msg.role === 'system'
 
@@ -139,6 +205,15 @@ function MessageBubble({ msg }: { msg: { id: string; role: string; content: stri
         </div>
       )}
       <div className={`max-w-[80%] ${isUser ? 'order-first' : ''}`}>
+        {/* Agent + timing badge */}
+        {!isUser && !isSystem && msg.agent && (
+          <div className="flex items-center gap-2 mb-1 text-[10px] text-gray-500">
+            <span className="text-kernel-400">{msg.agent}</span>
+            {msg.iterations != null && (
+              <span>{msg.iterations} iterations</span>
+            )}
+          </div>
+        )}
         <div className={`rounded-xl px-4 py-2.5 ${
           isUser
             ? 'bg-kernel-600 text-white'

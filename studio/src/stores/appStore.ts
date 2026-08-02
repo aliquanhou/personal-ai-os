@@ -37,7 +37,7 @@ export const useAppStore = create<AppState>((set) => ({
   sessionId: '',
   messages: [],
   isLoading: false,
-  currentAgent: 'project_manager',
+  currentAgent: 'ceo',
   sidebarOpen: true,
   activeTab: 'chat',
 
