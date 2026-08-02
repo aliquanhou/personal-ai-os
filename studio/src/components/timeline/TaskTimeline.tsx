@@ -52,9 +52,11 @@ export default function TaskTimeline() {
     es.onmessage = (e) => {
       try {
         const evt: LiveEvent = JSON.parse(e.data)
-        stepCounter.current += 1
-        const step = buildStep(stepCounter.current, evt)
-        setLiveSteps(prev => [...prev.slice(-80), step])
+        const step = buildStep(stepCounter.current + 1, evt)
+        if (step) {
+          stepCounter.current += 1
+          setLiveSteps(prev => [...prev.slice(-80), step])
+        }
       } catch {}
     }
 
@@ -211,9 +213,13 @@ const STAGE_LABELS: Record<string, { label: string; color: string }> = {
   COMPLETE: { label: '完成', color: 'text-green-400' },
 }
 
-function buildStep(id: number, evt: LiveEvent): TimelineStep {
+function buildStep(id: number, evt: LiveEvent): TimelineStep | null {
   const t = evt.type
-  const time = new Date(evt.timestamp * 1000).toLocaleTimeString()
+  // Filter noise: skip ping/connect events, skip tool:call:start (only show results)
+  if (t === 'stream.connected' || t.startsWith(':') || t === 'tool:call:start') return null
+  // Use Date.now() as fallback for events without timestamps
+  const ts = evt.timestamp ? evt.timestamp * 1000 : Date.now()
+  const time = new Date(ts).toLocaleTimeString()
   const stage = evt.data?.lifecycle_stage || ''
   const stageInfo = STAGE_LABELS[stage]
   const stageTag = stageInfo ? ` [${stageInfo.label}]` : ''
@@ -232,7 +238,8 @@ function buildStep(id: number, evt: LiveEvent): TimelineStep {
   if (t === 'tool:call:end') {
     const tool = evt.data.tool || ''
     const ok = evt.data.success !== false
-    return { id, type: t, source: evt.source, label: (TOOL_LABELS[tool] || tool) + (ok ? ' ✓' : ' ✗'), detail: '', status: ok ? 'done' : 'error', time }
+    const detail = ok ? '✓' : (evt.data.error || '✗').slice(0, 80)
+    return { id, type: t, source: evt.source, label: (TOOL_LABELS[tool] || tool), detail, status: ok ? 'done' : 'error', time }
   }
   if (t === 'agent:completed') {
     const gp = evt.data?.goal_progress
@@ -244,7 +251,8 @@ function buildStep(id: number, evt: LiveEvent): TimelineStep {
     const recoverable = cls === 'retry' ? ' (自动重试)' : cls === 'fatal' ? ' (已停止)' : ''
     return { id, type: t, source: evt.source, label: `${evt.source} 错误${stageTag}${recoverable}`, detail: (evt.data.error || '').slice(0, 150), status: cls === 'fatal' ? 'error' : 'running', time }
   }
-  return { id, type: t, source: evt.source, label: t + stageTag, detail: '', status: 'running', time }
+  // Unknown event type — don't clutter the timeline
+  return null
 }
 
 function pickIcon(step: TimelineStep): typeof Wrench {
