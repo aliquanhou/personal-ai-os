@@ -137,14 +137,216 @@ def restart(port: int = 8001, host: str = "127.0.0.1"):
 
 
 @app.command()
-def benchmark(json_output: bool = False, simulate_ratings: bool = False):
-    """Run the Skill Benchmark suite against the current system state.
+def start(fix: bool = True, port: int = 8001, host: str = "127.0.0.1"):
+    """First-run experience — check environment, fix issues, start server.
 
-    Evaluates Router accuracy, Skill precision, Gap detection, and
-    optionally simulates 100 iterations of rating evolution.
+    Detects OS, Python, Node, Git, dependencies, config, ports.
+    Auto-fixes solvable problems. Starts the server when ready.
 
-    Requires the API server to be running (python main.py serve).
+    Usage:
+      python main.py start           # Full check + start
+      python main.py start --no-fix  # Check only, don't fix
     """
+
+    def _run():
+        import subprocess, os, sys, time
+        from pathlib import Path
+
+        project_root = Path(__file__).parent
+
+        print("\n" + "=" * 60)
+        print("  Personal AI OS — First Run")
+        print("  AI Chief of Staff | v0.7.0-alpha")
+        print("=" * 60)
+
+        checks_passed = 0
+        checks_total = 0
+        issues = []
+
+        # ── 1. OS ──
+        checks_total += 1
+        print(f"\n[1/7] OS Check...", end=" ")
+        try:
+            import platform
+            system = platform.system()
+            version = platform.version()
+            print(f"OK  ({system} {version[:40]})")
+            checks_passed += 1
+        except Exception as e:
+            print(f"FAIL — {e}")
+            issues.append(("OS detection", str(e), None))
+
+        # ── 2. Python ──
+        checks_total += 1
+        print(f"[2/7] Python...", end=" ")
+        py_ver = sys.version_info
+        if py_ver >= (3, 10):
+            print(f"OK  ({sys.version.split()[0]})")
+            checks_passed += 1
+        else:
+            print(f"WARN — Python {sys.version.split()[0]} (need 3.10+)")
+            issues.append(("Python version", f"3.10+ required, have {sys.version.split()[0]}",
+                          "Install Python 3.12 from https://python.org"))
+
+        # ── 3. Dependencies ──
+        checks_total += 1
+        print(f"[3/7] Dependencies...", end=" ")
+        required = ["fastapi", "uvicorn", "sqlalchemy", "httpx", "pydantic", "typer"]
+        missing = []
+        for pkg in required:
+            try:
+                __import__(pkg)
+            except ImportError:
+                missing.append(pkg)
+        if not missing:
+            print(f"OK  ({len(required)} packages)")
+            checks_passed += 1
+        else:
+            print(f"WARN — missing: {', '.join(missing)}")
+            cmd = f"pip install {' '.join(missing)}"
+            issues.append((f"Missing deps: {', '.join(missing)}", "", cmd))
+            if fix:
+                print(f"       Auto-installing...")
+                subprocess.run([sys.executable, "-m", "pip", "install"] + missing,
+                             capture_output=True)
+                # Re-check
+                still_missing = []
+                for pkg in missing:
+                    try:
+                        __import__(pkg)
+                    except ImportError:
+                        still_missing.append(pkg)
+                if not still_missing:
+                    checks_passed += 1
+                    print(f"       FIXED — all dependencies installed")
+
+        # ── 4. Node.js ──
+        checks_total += 1
+        print(f"[4/7] Node.js...", end=" ")
+        try:
+            r = subprocess.run(["node", "--version"], capture_output=True, text=True, timeout=5)
+            if r.returncode == 0:
+                print(f"OK  ({r.stdout.strip()})")
+                checks_passed += 1
+            else:
+                print("WARN — Node not found (Studio frontend needs it)")
+                issues.append(("Node.js", "Not installed or not in PATH",
+                              "Install Node.js 20+ from https://nodejs.org"))
+        except FileNotFoundError:
+            print("WARN — Node not found (Studio frontend needs it)")
+            issues.append(("Node.js", "Not found", "Install Node.js 20+ from https://nodejs.org"))
+
+        # ── 5. Git ──
+        checks_total += 1
+        print(f"[5/7] Git...", end=" ")
+        try:
+            r = subprocess.run(["git", "--version"], capture_output=True, text=True, timeout=5)
+            if r.returncode == 0:
+                print(f"OK  ({r.stdout.strip()[:30]})")
+                checks_passed += 1
+            else:
+                print("WARN")
+                issues.append(("Git", "Not found", "Install Git from https://git-scm.com"))
+        except FileNotFoundError:
+            print("WARN")
+            issues.append(("Git", "Not found", "Install Git from https://git-scm.com"))
+
+        # ── 6. .env Config ──
+        checks_total += 1
+        print(f"[6/7] Configuration (.env)...", end=" ")
+        env_path = project_root / ".env"
+        if env_path.exists():
+            content = env_path.read_text()
+            if "DEEPSEEK_API_KEY=sk-" in content and "sk-..." not in content:
+                print("OK  (API key configured)")
+                checks_passed += 1
+            elif "OPENAI_API_KEY=sk-" in content and "sk-..." not in content:
+                print("OK  (OpenAI key configured)")
+                checks_passed += 1
+            elif "ANTHROPIC_API_KEY=sk-ant-" in content and "sk-ant-..." not in content:
+                print("OK  (Anthropic key configured)")
+                checks_passed += 1
+            else:
+                print("WARN — API key not configured")
+                issues.append((".env API key", "No valid LLM API key found",
+                              "Edit .env and set DEEPSEEK_API_KEY=sk-..."))
+        else:
+            print("WARN — .env not found, creating from .env.example")
+            example = project_root / ".env.example"
+            if example.exists():
+                env_path.write_text(example.read_text())
+                print("       Created .env. Edit it to add your API key.")
+            issues.append((".env file", "Created from template, needs API key",
+                          "Edit .env and set DEEPSEEK_API_KEY=sk-..."))
+
+        # ── 7. Port ──
+        checks_total += 1
+        print(f"[7/7] Port {port}...", end=" ")
+        try:
+            if sys.platform == "win32":
+                r = subprocess.run(
+                    ["bash", "-c", f"netstat -ano | grep ':{port} ' | grep LISTENING | head -3"],
+                    capture_output=True, text=True, timeout=5
+                )
+                if r.stdout.strip():
+                    print(f"WARN — port {port} is in use")
+                    issues.append((f"Port {port}", "Already in use",
+                                  f"Run: python main.py restart --port {port}"))
+                else:
+                    print(f"OK  (free)")
+                    checks_passed += 1
+            else:
+                import socket
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(1)
+                result = s.connect_ex((host, port))
+                s.close()
+                if result == 0:
+                    print(f"WARN — port {port} is in use")
+                    issues.append((f"Port {port}", "In use", f"Run: lsof -ti:{port} | xargs kill"))
+                else:
+                    print(f"OK  (free)")
+                    checks_passed += 1
+        except Exception:
+            print("OK  (could not verify, will try to bind)")
+
+        # ── Summary ──
+        print(f"\n{'='*60}")
+        print(f"  RESULT: {checks_passed}/{checks_total} checks passed")
+        print(f"{'='*60}")
+
+        if issues and fix:
+            print(f"\n  {len(issues)} issue(s) found:")
+            for i, (name, detail, suggestion) in enumerate(issues, 1):
+                print(f"\n  [{i}] {name}")
+                if detail:
+                    print(f"      {detail}")
+                if suggestion:
+                    print(f"      Fix: {suggestion}")
+
+        # ── Start server ──
+        if checks_passed >= checks_total - 1 or fix:
+            print(f"\n{'='*60}")
+            print(f"  Starting Personal AI OS on {host}:{port}...")
+            print(f"{'='*60}")
+            print(f"\n  Studio:  http://localhost:3000  (cd studio && npm run dev)")
+            print(f"  API:     http://{host}:{port}/health")
+            print(f"  Agents:  python main.py agents")
+            print(f"  Chat:    python main.py chat \"your goal\"")
+            print(f"\n  Starting server...\n")
+
+            import uvicorn
+            uvicorn.run("api.app:app", host=host, port=port, reload=False)
+        else:
+            print(f"\n  Too many issues. Fix them and run again: python main.py start")
+            print(f"  Or skip checks: python main.py serve")
+
+    _run()
+
+
+@app.command()
+def benchmark(json_output: bool = False, simulate_ratings: bool = False):
+    """Run the Skill Benchmark suite against the current system state."""
 
     def _run():
         from tests.benchmark.runner import SkillBenchmark

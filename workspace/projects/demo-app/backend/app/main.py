@@ -10,7 +10,23 @@ import hashlib
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "database", "taskflow.db")
 
 app = FastAPI(title="TaskFlow", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# ── CORS ──
+# 安全修复：明确指定前端来源，禁止 "*" + allow_credentials=True 的非法组合。
+# 前端为 React (Vite)，默认开发端口 5173。
+# 如需新增来源（如生产域名），在此列表追加即可。
+CORS_ALLOW_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOW_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def hash_password(password: str) -> str:

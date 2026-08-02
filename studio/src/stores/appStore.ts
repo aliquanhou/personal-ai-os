@@ -19,7 +19,7 @@ interface AppState {
 
   // UI
   sidebarOpen: boolean;
-  activeTab: 'chat' | 'workspace' | 'memory' | 'agents';
+  activeTab: 'chat' | 'workspace' | 'memory' | 'timeline' | 'agents';
 
   // Actions
   setSessionId: (id: string) => void;
@@ -27,7 +27,7 @@ interface AppState {
   setLoading: (loading: boolean) => void;
   setCurrentAgent: (agent: string) => void;
   toggleSidebar: () => void;
-  setActiveTab: (tab: 'chat' | 'workspace' | 'memory' | 'agents') => void;
+  setActiveTab: (tab: 'chat' | 'workspace' | 'memory' | 'timeline' | 'agents') => void;
 }
 
 let msgCounter = 0;

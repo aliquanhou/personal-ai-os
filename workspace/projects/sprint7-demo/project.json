@@ -1,0 +1,14 @@
+{
+  "name": "Sprint7 Todo API",
+  "slug": "sprint7-demo",
+  "description": "A simple FastAPI Todo (to-do) REST API with SQLite persistence. CRUD operations for todo items.",
+  "goals": [
+    "Build a working FastAPI todo API",
+    "Provide full CRUD operations (create, read, update, delete)",
+    "Persist data with SQLite",
+    "Include automated tests"
+  ],
+  "status": "active",
+  "created_at": "2026-08-02T14:47:05.082373+00:00",
+  "updated_at": "2026-08-02T14:47:05.082373+00:00"
+}

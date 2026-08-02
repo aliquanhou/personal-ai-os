@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Bot, MessageSquare, FolderOpen, Brain, PanelLeftClose, PanelLeft } from 'lucide-react'
+import { Bot, MessageSquare, FolderOpen, Brain, PanelLeftClose, PanelLeft, GitBranch } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { listAgents, Agent } from '../../lib/api'
 import ChatPanel from '../chat/ChatPanel'
 import WorkspacePanel from '../workspace/WorkspacePanel'
 import MemoryViewer from '../memory_viewer/MemoryViewer'
+import TaskTimeline from '../timeline/TaskTimeline'
 
 export default function Sidebar() {
   const { currentAgent, setCurrentAgent, sidebarOpen, toggleSidebar, activeTab, setActiveTab } = useAppStore()
@@ -32,6 +33,7 @@ export default function Sidebar() {
             { id: 'chat' as const, icon: MessageSquare, label: '对话' },
             { id: 'workspace' as const, icon: FolderOpen, label: '工作区' },
             { id: 'memory' as const, icon: Brain, label: '记忆' },
+            { id: 'timeline' as const, icon: GitBranch, label: 'Timeline' },
             { id: 'agents' as const, icon: Bot, label: 'Agents' },
           ].map(({ id, icon: Icon, label }) => (
             <button
@@ -75,6 +77,7 @@ export default function Sidebar() {
             {activeTab === 'chat' && '💬 对话'}
             {activeTab === 'workspace' && '📁 工作区'}
             {activeTab === 'memory' && '🧠 记忆系统'}
+            {activeTab === 'timeline' && '⏱️ 任务时间线'}
             {activeTab === 'agents' && '🤖 智能体'}
           </span>
         </div>
@@ -84,6 +87,7 @@ export default function Sidebar() {
           {activeTab === 'chat' && <ChatPanel />}
           {activeTab === 'workspace' && <WorkspacePanel />}
           {activeTab === 'memory' && <MemoryViewer />}
+          {activeTab === 'timeline' && <TaskTimeline />}
           {activeTab === 'agents' && <AgentsPanel />}
         </div>
       </div>

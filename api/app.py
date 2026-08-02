@@ -25,6 +25,7 @@ from pydantic import BaseModel
 
 from agents.ceo import CEOAgent
 from agents.coding import CodingAgent, ResearchAgent, WritingAgent
+from agents.environment import EnvironmentAgent
 from agents.project_manager import ProjectManagerAgent
 from agents.reflection import ReflectionAgent
 from agents.runtime import get_agent_runtime
@@ -99,9 +100,10 @@ async def startup():
     researcher = ResearchAgent()
     writer = WritingAgent()
     reflector = ReflectionAgent()
+    env_agent = EnvironmentAgent()
 
     # ── Register in Runtime (existing) ──
-    for a in [ceo, pm, coder, researcher, writer, reflector]:
+    for a in [ceo, pm, coder, researcher, writer, reflector, env_agent]:
         runtime.register(a)
 
     # ── Register in AgentRegistry (Sprint 3: formal descriptors) ──
@@ -182,6 +184,19 @@ async def startup():
         input_formats=["task_result", "execution_log"],
         output_formats=["reflection", "lesson", "improvement_plan"],
         agent_ref=reflector,
+    ))
+
+    registry.register(AgentDescriptor(
+        name="environment_agent", description="环境诊断和修复 — 检测 OS/Python/Node/依赖/端口，自动修复",
+        capabilities=[Capability.ANALYSIS, Capability.SHELL_EXEC,
+                      Capability.FILE_OPS, Capability.MEMORY_WRITE],
+        permissions=[AgentPermission.EXEC_SHELL_SAFE, AgentPermission.READ_WORKSPACE,
+                     AgentPermission.MEMORY_READ, AgentPermission.MEMORY_WRITE],
+        memory_scope=[MemoryScope.KNOWLEDGE, MemoryScope.EXPERIENCES],
+        tier="utility",
+        input_formats=["diagnostic_request"],
+        output_formats=["diagnostic_report", "fix_plan"],
+        agent_ref=env_agent,
     ))
 
     # Build default teams

@@ -128,12 +128,14 @@ conn.execute("INSERT OR IGNORE INTO users(id,username,password,role) VALUES(2,'d
 - **风险**: 数据库文件泄露即全部凭据泄露；登录用明文 SQL 比较 `password=?`
 - **修复**: 使用 `passlib[bcrypt]` 哈希存储；种子数据用环境变量注入或密码哈希
 
-#### S2. CORS 配置非法且危险
+#### S2. CORS 配置非法且危险 ✅ 已修复
 ```python
+# 原问题代码
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, ...)
 ```
 - **风险**: `allow_origins=["*"]` 与 `allow_credentials=True` 在浏览器规范中**互斥**——带凭据的请求会被浏览器拒绝，且实际上允许任意来源访问
-- **修复**: 明确指定前端来源域名，如 `allow_origins=["http://localhost:5173"]`
+- **修复**: 明确指定前端来源域名 `CORS_ALLOW_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]`（React/Vite 默认端口），保留 `allow_credentials=True`，生产新增域名时追加到列表即可
+- **状态**: ✅ 已修复（2026-08-02）
 
 #### S3. 认证机制形同虚设
 ```python
