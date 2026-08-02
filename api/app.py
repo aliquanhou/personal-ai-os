@@ -44,6 +44,14 @@ from kernel.workspace import get_workspace, WorkspaceManager
 from kernel.audit import get_audit_log, AuditCategory, AuditSeverity
 from kernel.budget import get_budget_manager
 from kernel.reputation import get_reputation_registry
+# Sprint 6
+from kernel.evolution import get_experience_analyzer
+from kernel.improvement import (
+    get_improvement_registry,
+    ProposalStatus,
+    ProposalType,
+)
+from kernel.experiment import get_experiment_runner
 from memory.manager import get_memory
 from tools.registry import get_tool_registry
 
@@ -1016,6 +1024,177 @@ async def run_scenario_test(name: str = ""):
     else:
         result = runner.run_all()
     return result
+
+
+# ── Sprint 6: Evolution Routes ───────────────────────
+
+# ── Experience Analysis ────────────────────────────────
+
+@app.post("/api/evolution/analyze")
+async def run_experience_analysis(task_limit: int = 100, experience_limit: int = 50):
+    """Run a full experience analysis across historical data.
+
+    Returns failure patterns, bottlenecks, and improvement opportunities.
+    This is the OBSERVE phase — it does NOT modify anything.
+    """
+    analyzer = get_experience_analyzer()
+    report = analyzer.analyze(task_limit=task_limit, experience_limit=experience_limit)
+    return report.to_dict()
+
+
+@app.get("/api/evolution/last-report")
+async def get_last_analysis():
+    """Get the most recent analysis report."""
+    analyzer = get_experience_analyzer()
+    report = analyzer.get_last_report()
+    if not report:
+        raise HTTPException(status_code=404, detail="No analysis report yet. Run POST /api/evolution/analyze first.")
+    return report.to_dict()
+
+
+# ── Improvement Proposals ───────────────────────────────
+
+@app.get("/api/evolution/proposals")
+async def list_proposals(status: str = ""):
+    """List improvement proposals. Filter by status (pending_review, approved, etc.)."""
+    reg = get_improvement_registry()
+    reg.check_stale()  # Auto-expire stale proposals
+    if status:
+        try:
+            st = ProposalStatus(status)
+            return {"proposals": reg.list_by_status(st)}
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Unknown status: {status}")
+    return {"proposals": reg.list_by_status()}
+
+
+@app.get("/api/evolution/proposals/pending")
+async def list_pending_proposals():
+    """Get proposals waiting for human review."""
+    reg = get_improvement_registry()
+    reg.check_stale()
+    return {"proposals": reg.list_pending_review()}
+
+
+@app.get("/api/evolution/proposals/{proposal_id}")
+async def get_proposal(proposal_id: str):
+    """Get a single proposal by ID."""
+    prop = get_improvement_registry().get(proposal_id)
+    if not prop:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return prop.to_dict()
+
+
+@app.post("/api/evolution/proposals/generate")
+async def generate_proposals_from_analysis():
+    """Generate improvement proposals from the last analysis report.
+
+    Runs ExperienceAnalyzer → generates ImprovementProposals → submits for review.
+    This is the PROPOSE phase — proposals still need human approval.
+    """
+    analyzer = get_experience_analyzer()
+    report = analyzer.analyze()
+    reg = get_improvement_registry()
+    proposals = reg.generate_from_analysis(report)
+    return {
+        "generated": len(proposals),
+        "report_summary": report.summary,
+        "proposals": [p.to_dict() for p in proposals],
+    }
+
+
+@app.post("/api/evolution/proposals/{proposal_id}/approve")
+async def approve_proposal(proposal_id: str, notes: str = ""):
+    """Human approves an improvement proposal."""
+    ok = get_improvement_registry().approve(proposal_id, reviewer="human", notes=notes)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Proposal cannot be approved in its current state")
+    return {"status": "approved", "proposal_id": proposal_id}
+
+
+@app.post("/api/evolution/proposals/{proposal_id}/reject")
+async def reject_proposal(proposal_id: str, notes: str = ""):
+    """Human rejects an improvement proposal."""
+    ok = get_improvement_registry().reject(proposal_id, reviewer="human", notes=notes)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Proposal cannot be rejected in its current state")
+    return {"status": "rejected", "proposal_id": proposal_id}
+
+
+@app.get("/api/evolution/stats")
+async def get_evolution_stats():
+    """Get evolution system statistics."""
+    return {
+        "improvements": get_improvement_registry().get_stats(),
+        "experiments": get_experiment_runner().get_stats(),
+    }
+
+
+# ── Experiments ────────────────────────────────────────
+
+@app.post("/api/evolution/experiments")
+async def create_experiment(title: str, agent_name: str,
+                            proposal_id: str = "", variant_desc: str = ""):
+    """Create a new A/B experiment for testing an improvement."""
+    exp = get_experiment_runner().create(title, agent_name, proposal_id, variant_desc)
+    # Link proposal to experiment
+    if proposal_id:
+        get_improvement_registry().mark_experimenting(proposal_id, exp.id)
+    return exp.to_dict()
+
+
+@app.post("/api/evolution/experiments/{experiment_id}/start")
+async def start_experiment(experiment_id: str):
+    """Start running an experiment."""
+    ok = get_experiment_runner().start(experiment_id)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Experiment cannot be started")
+    return {"status": "started"}
+
+
+@app.post("/api/evolution/experiments/{experiment_id}/record")
+async def record_experiment_result(experiment_id: str, side: str,
+                                   success: bool, duration_ms: float):
+    """Record a task result on either 'baseline' or 'variant' side."""
+    ok = get_experiment_runner().record(experiment_id, side, success, duration_ms)
+    return {"status": "recorded", "experiment_full": not ok}
+
+
+@app.get("/api/evolution/experiments/{experiment_id}/evaluate")
+async def evaluate_experiment(experiment_id: str):
+    """Evaluate the results of an experiment (baseline vs variant)."""
+    result = get_experiment_runner().evaluate(experiment_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    return result
+
+
+@app.post("/api/evolution/experiments/{experiment_id}/promote")
+async def promote_experiment(experiment_id: str):
+    """Human promotion gate: make the variant permanent.
+
+    Only works if experiment is COMPLETED and variant won.
+    """
+    ok = get_experiment_runner().promote(experiment_id)
+    if not ok:
+        raise HTTPException(status_code=400,
+                           detail="Cannot promote: experiment must be COMPLETED and variant must win")
+    # Also promote the linked proposal
+    exp = get_experiment_runner().get(experiment_id)
+    if exp and exp.proposal_id:
+        get_improvement_registry().promote(exp.proposal_id, exp.evaluate())
+    return {"status": "promoted", "experiment_id": experiment_id}
+
+
+@app.get("/api/evolution/experiments")
+async def list_experiments(status: str = ""):
+    """List experiments. Filter: running, completed, promoted."""
+    runner = get_experiment_runner()
+    if status == "running":
+        return {"experiments": runner.list_active()}
+    elif status == "completed":
+        return {"experiments": runner.list_completed()}
+    return {"experiments": runner.list_all()}
 
 
 # ── Static Files (Studio) ──────────────────────────────

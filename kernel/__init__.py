@@ -55,6 +55,25 @@ from kernel.audit import (
     AuditSeverity,
     get_audit_log,
 )
+# Sprint 6
+from kernel.evolution import (
+    ExperienceAnalyzer,
+    PatternReport,
+    get_experience_analyzer,
+)
+from kernel.improvement import (
+    ImprovementProposal,
+    ImprovementRegistry,
+    ProposalStatus,
+    ProposalType,
+    get_improvement_registry,
+)
+from kernel.experiment import (
+    Experiment,
+    ExperimentRunner,
+    ExperimentStatus,
+    get_experiment_runner,
+)
 
 __all__ = [
     "Config", "get_config", "set_config",
@@ -75,4 +94,10 @@ __all__ = [
     "BudgetManager", "BudgetStatus", "TokenUsage", "get_budget_manager",
     "AuditCategory", "AuditEntry", "AuditLog", "AuditSeverity",
     "get_audit_log",
+    # Sprint 6
+    "ExperienceAnalyzer", "PatternReport", "get_experience_analyzer",
+    "ImprovementProposal", "ImprovementRegistry", "ProposalStatus",
+    "ProposalType", "get_improvement_registry",
+    "Experiment", "ExperimentRunner", "ExperimentStatus",
+    "get_experiment_runner",
 ]
