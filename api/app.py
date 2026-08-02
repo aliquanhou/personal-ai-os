@@ -463,7 +463,7 @@ async def chat_stream(req: ChatRequest):
     memory = get_memory()
     session_id = req.session_id or str(uuid.uuid4())[:8]
 
-    # Save user message
+    # Save user message (only once — duplicate text is deduped by frontend)
     memory.save_message(session_id, "user", req.message)
 
     async def generate():
