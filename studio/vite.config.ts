@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+    hmr: { overlay: false },
     proxy: {
       '/api': 'http://127.0.0.1:8001',
       '/health': 'http://127.0.0.1:8001',
