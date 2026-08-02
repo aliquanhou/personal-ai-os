@@ -541,9 +541,24 @@ async def chat_stream(req: ChatRequest):
                             yield f"data: {_json.dumps({'type': 'tool_end', 'tool': fn, 'success': False, 'output': msg})}\n\n"
                             continue
 
+                        # Publish to EventBus so Timeline SSE sees it
+                        try:
+                            from kernel.events import Event, EventType, EventBus, get_event_bus
+                            bus = get_event_bus()
+                            await bus.publish(Event(type=EventType.TOOL_CALL_START,
+                                data={"agent_id": agent.id, "tool": fn, "session_id": session_id}, source=agent.name))
+                        except Exception: pass
+
                         result = await agent.tools.execute(tool_name=fn, **fa)
                         tool_log.append({"tool": fn, "args": fa, "success": result.success, "output": result.output[:500]})
                         lc.record_tool_result(fn, result.success, result.output or result.error or f"{fn} failed", fa)
+
+                        try:
+                            await bus.publish(Event(type=EventType.TOOL_CALL_END,
+                                data={"agent_id": agent.id, "tool": fn, "success": result.success, "session_id": session_id},
+                                source=agent.name))
+                        except Exception: pass
+
                         yield f"data: {_json.dumps({'type': 'tool_end', 'tool': fn, 'success': result.success, 'output': result.output[:300]})}\n\n"
                         messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result.output if result.success else f"Error: {result.error or result.output}"})
                 else:
@@ -556,6 +571,13 @@ async def chat_stream(req: ChatRequest):
 
                     messages.append({"role": "assistant", "content": full_response})
                     progress = lc.tracker.progress() if lc.tracker.items else {"fulfilled": 0, "items": 0}
+                    try:
+                        bus = get_event_bus()
+                        await bus.publish(Event(type=EventType.AGENT_COMPLETED,
+                            data={"agent_id": agent.id, "output_length": len(full_response), "session_id": session_id,
+                                  "goal_progress": progress if progress["items"] > 0 else None},
+                            source=agent.name))
+                    except Exception: pass
                     yield f"data: {_json.dumps({'type': 'done', 'response': full_response, 'iterations': iteration, 'tool_calls': tool_log, 'progress': progress})}\n\n"
                     break
             else:
