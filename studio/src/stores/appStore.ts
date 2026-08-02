@@ -133,7 +133,6 @@ export const useAppStore = create<AppState>((set, get) => ({
           if (prev && prev.role === m.role && prev.content === m.content) continue;
           msgs.push(m);
         }
-        });
         if (msgs.length > 0) {
           msgCounter = msgs.length + 1;
           set({ messages: msgs });

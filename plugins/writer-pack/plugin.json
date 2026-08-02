@@ -1,1 +1,19 @@
-{"name":"official-writer","version":"1.0.0","display_name":"Writing Agent Plugin","description":"文案、博客、产品介绍、邮件、技术文档。输入主题 → 策划大纲 → 撰写内容 → 优化输出。","author":"Personal AI OS Official","category":"writing","icon":"Pen","official":true,"skills":["technical_writing","content_writing"],"target_agents":["writing_agent"],"enabled":true,"min_os_version":"1.0.0"}
+{
+  "name": "official-writer",
+  "version": "1.0.0",
+  "display_name": "Writing Agent Plugin",
+  "description": "文案、博客、产品介绍、邮件、技术文档。输入主题 → 策划大纲 → 撰写内容 → 优化输出。",
+  "author": "Personal AI OS Official",
+  "category": "writing",
+  "icon": "Pen",
+  "official": true,
+  "skills": [
+    "technical_writing",
+    "content_writing"
+  ],
+  "target_agents": [
+    "writing_agent"
+  ],
+  "enabled": false,
+  "min_os_version": "1.0.0"
+}
