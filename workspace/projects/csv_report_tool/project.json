@@ -1,0 +1,9 @@
+{
+  "name": "csv_report_tool",
+  "slug": "csv_report_tool",
+  "description": "CSV报告生成工具 — 轻量CLI工具，summary/stats/group/top四种报告，纯标准库",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T10:43:30.475594+00:00",
+  "updated_at": "2026-08-02T10:43:30.475594+00:00"
+}

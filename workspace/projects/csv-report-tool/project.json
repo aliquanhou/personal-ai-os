@@ -1,0 +1,9 @@
+{
+  "name": "csv-report-tool",
+  "slug": "csv-report-tool",
+  "description": "CSV 报告生成工具 - 遵循 docs/csv_report_architecture.md 技术方案",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T10:45:30.565093+00:00",
+  "updated_at": "2026-08-02T10:45:30.565093+00:00"
+}

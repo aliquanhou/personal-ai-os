@@ -51,6 +51,9 @@ class AgentContext:
     project_slug: str = ""
     checkpoints: list[dict] = field(default_factory=list)
     resume_from_checkpoint: dict | None = None
+    # Sprint 4: Inter-agent communication
+    mailbox_context: str = ""  # Messages from teammates
+    handoff_context: dict | None = None  # Structured handoff from previous agent
 
 
 @dataclass
@@ -115,6 +118,22 @@ class BaseAgent(ABC):
         messages = [
             {"role": "system", "content": self.system_prompt(ctx)},
         ]
+        # Sprint 4: Inject handoff context from previous agent
+        if ctx.handoff_context:
+            hc = ctx.handoff_context
+            handoff_msg = (
+                f"## 📋 来自上一个 Agent 的交接上下文\n"
+                f"上一个任务总结: {hc.get('summary', '')}\n"
+                f"完成状态: {hc.get('completion_status', '')}\n"
+                f"关键发现: {', '.join(hc.get('key_findings', []))}\n"
+                f"已创建的产出物: {', '.join(hc.get('artifacts', []))}\n"
+                f"警吿: {', '.join(hc.get('warnings', []))}\n"
+                f"建议下一步: {', '.join(hc.get('next_steps', []))}\n"
+            )
+            messages.append({"role": "system", "content": handoff_msg})
+        # Sprint 4: Inject mailbox context from teammates
+        if ctx.mailbox_context:
+            messages.append({"role": "system", "content": ctx.mailbox_context})
         if ctx.resume_from_checkpoint:
             resume_msg = (
                 f"⚠️ 这是从断点恢复的执行。上一次执行到: "

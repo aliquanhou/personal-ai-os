@@ -144,14 +144,17 @@ class AgentRouter:
 
     async def execute_plan(self, plan: RoutePlan, session_id: str = "",
                            project_slug: str = "") -> dict:
-        """Execute a RoutePlan by running each task through the assigned agent.
+        """Execute a RoutePlan with inter-agent communication.
 
-        Tasks execute in topological order. Independent tasks at same depth
-        could run in parallel (future: use asyncio.gather for that).
+        Sprint 4: After each node completes, a HandoffContext is sent via
+        the CommunicationBus to all dependent nodes' agents. Before a node
+        runs, handoff messages from dependencies are prepended to the goal.
         """
-        from agents.runtime import AgentContext, get_agent_runtime
+        from agents.runtime import get_agent_runtime
+        from kernel.comm_bus import get_comm_bus, HandoffContext
 
         runtime = get_agent_runtime()
+        comm_bus = get_comm_bus()
         results: dict[str, dict] = {}
 
         if not plan.graph:
@@ -159,21 +162,36 @@ class AgentRouter:
 
         graph = plan.graph
 
+        # Ensure all assigned agents have mailboxes
+        for node in graph.nodes.values():
+            agent_name = plan.agent_assignments.get(node.id, "ceo")
+            comm_bus.register_agent(agent_name)
+
         # Execute nodes in topological order
         for node in graph.topological_order():
-            node.state = NodeState.RUNNING
             agent_name = plan.agent_assignments.get(node.id, "ceo")
+            node.state = NodeState.RUNNING
 
-            # Build task context
-            goal_context = node.description or node.title
-            # Add dependency context
-            dep_contexts = []
+            # Sprint 4: Build handoff context from dependency results
+            handoff_prepend = ""
             for dep_id in node.dependencies:
                 if dep_id in results and results[dep_id].get("output"):
-                    dep_contexts.append(f"- {graph.nodes[dep_id].title}: {results[dep_id]['output'][:200]}")
+                    dep_node = graph.nodes[dep_id]
+                    dep_agent = plan.agent_assignments.get(dep_id, "")
+                    handoff_prepend += (
+                        f"\n[{dep_agent} 完成了「{dep_node.title}」]\n"
+                        f"{results[dep_id]['output'][:500]}\n"
+                    )
 
-            if dep_contexts:
-                goal_context += "\n\n前面任务的输出:\n" + "\n".join(dep_contexts)
+            # Build the goal with handoff context prepended
+            goal_context = node.description or node.title
+            if handoff_prepend:
+                goal_context = (
+                    f"以下是前面队友完成的工作交接，请基于这些上下文来完成你的任务：\n"
+                    f"{handoff_prepend}\n"
+                    f"---\n"
+                    f"你的任务：{goal_context}"
+                )
 
             try:
                 agent_result = await runtime.execute(
@@ -187,6 +205,25 @@ class AgentRouter:
                     "duration_ms": agent_result.duration_ms,
                 }
                 node.state = NodeState.COMPLETED if agent_result.success else NodeState.FAILED
+
+                # Sprint 4: Send handoff to dependent nodes' agents
+                if agent_result.success:
+                    hc = HandoffContext(
+                        task_id=node.id,
+                        from_agent=agent_name,
+                        summary=agent_result.output[:200],
+                        completion_status="done" if agent_result.success else "partial",
+                        key_findings=[f"完成: {node.title}"],
+                        artifacts=[tc.get("output", "")[:100] for tc in agent_result.tool_calls if tc.get("success")],
+                        next_steps=[f"继续: {graph.nodes[dep_id].title}" for dep_id in node.dependents],
+                    )
+                    for dep_id in node.dependents:
+                        dep_agent = plan.agent_assignments.get(dep_id, "")
+                        if dep_agent:
+                            hc.to_agent = dep_agent
+                            comm_bus.handoff(agent_name, dep_agent, hc)
+
+            except Exception as e:
                 results[node.id] = node.result
 
             except Exception as e:

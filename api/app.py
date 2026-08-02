@@ -38,6 +38,7 @@ from kernel.registry import (
     get_agent_registry,
 )
 from kernel.router import AgentRouter, RoutePlan, get_agent_router
+from kernel.comm_bus import get_comm_bus, CommunicationBus
 from kernel.workspace import get_workspace, WorkspaceManager
 from memory.manager import get_memory
 from tools.registry import get_tool_registry
@@ -165,11 +166,19 @@ async def startup():
     # Build default teams
     registry.build_default_teams()
 
+    # Sprint 4: Initialize Communication Bus with channels for all teams
+    comm_bus = get_comm_bus()
+    comm_bus.setup_default_channels()
+
     config = get_config()
-    logger.info("Personal AI OS v0.3.0 starting on %s:%s", config.server.host, config.server.port)
+    logger.info("Personal AI OS v0.4.0 starting on %s:%s", config.server.host, config.server.port)
     logger.info("Agent Runtime: %s", [a["name"] for a in runtime.list_agents()])
     logger.info("Agent Registry: %s agents, %s teams",
                 len(registry.list_all()), len(registry.list_teams()))
+    org_status = comm_bus.get_organization_status()
+    logger.info("Comm Bus: %s agents, %s channels, %s messages routed",
+                len(org_status["agents"]), len(org_status["channels"]),
+                org_status["total_messages_routed"])
 
 
 # ── Models ─────────────────────────────────────────────
@@ -773,6 +782,76 @@ async def smart_chat(req: SmartChatRequest):
         "mode": req.mode,
         "result": result,
     }
+
+
+# ── Sprint 4: Communication Routes ──────────────────
+
+@app.get("/api/comm/status")
+async def get_comm_status():
+    """Get the full communication organization status."""
+    return get_comm_bus().get_organization_status()
+
+
+@app.get("/api/comm/inbox/{agent_name}")
+async def get_agent_inbox(agent_name: str):
+    """Get an agent's inbox (unread messages)."""
+    return get_comm_bus().get_agent_inbox(agent_name)
+
+
+@app.post("/api/comm/inbox/{agent_name}/clear")
+async def clear_agent_inbox(agent_name: str):
+    """Mark all messages in an agent's inbox as read."""
+    get_comm_bus().clear_agent_inbox(agent_name)
+    return {"status": "ok"}
+
+
+@app.post("/api/comm/message")
+async def send_message(sender: str, recipient: str, subject: str,
+                       body: str = "", msg_type: str = "notification",
+                       priority: str = "normal"):
+    """Send a message from one agent to another (or to a team channel).
+
+    recipient can be: agent_name, team:<team_name>, or 'broadcast'
+    """
+    from kernel.comm_bus import AgentMessage, MessageType, MessagePriority
+    comm_bus = get_comm_bus()
+
+    try:
+        mt = MessageType(msg_type)
+        mp = MessagePriority(priority)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    msg = AgentMessage(
+        sender=sender, recipient=recipient,
+        msg_type=mt, priority=mp,
+        subject=subject, body=body,
+    )
+    delivered = comm_bus.route(msg)
+    return {"status": "sent", "delivered": delivered, "message_id": msg.id}
+
+
+@app.post("/api/comm/handoff")
+async def create_handoff(from_agent: str, to_agent: str, summary: str,
+                         task_id: str = "", completion_status: str = "done"):
+    """Create a formal handoff from one agent to another."""
+    from kernel.comm_bus import HandoffContext
+    comm_bus = get_comm_bus()
+
+    hc = HandoffContext(
+        task_id=task_id,
+        summary=summary,
+        completion_status=completion_status,
+    )
+    delivered = comm_bus.handoff(from_agent, to_agent, hc)
+    return {"status": "handoff_sent", "delivered": delivered}
+
+
+@app.get("/api/comm/channel/{team_name}")
+async def get_channel_history(team_name: str, limit: int = 50):
+    """Get recent messages from a team channel."""
+    history = get_comm_bus().get_channel_history(team_name, limit)
+    return {"team": team_name, "messages": history}
 
 
 # ── Static Files (Studio) ──────────────────────────────

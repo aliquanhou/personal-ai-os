@@ -27,6 +27,15 @@ from kernel.task_graph import (
     get_task_graph_store,
 )
 from kernel.router import AgentRouter, RoutePlan, get_agent_router
+from kernel.comm_bus import (
+    AgentMailbox,
+    AgentMessage,
+    CommunicationBus,
+    HandoffContext,
+    MessageType,
+    TeamChannel,
+    get_comm_bus,
+)
 
 __all__ = [
     "Config", "get_config", "set_config",
@@ -39,4 +48,7 @@ __all__ = [
     "NodeState", "TaskGraph", "TaskGraphStore", "TaskNode",
     "get_task_graph_store",
     "AgentRouter", "RoutePlan", "get_agent_router",
+    # Sprint 4
+    "AgentMailbox", "AgentMessage", "CommunicationBus",
+    "HandoffContext", "MessageType", "TeamChannel", "get_comm_bus",
 ]
