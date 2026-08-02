@@ -247,7 +247,10 @@ function buildStep(id: number, evt: LiveEvent): TimelineStep | null {
   if (t === 'tool:call:end') {
     const tool = evt.data.tool || ''
     const ok = evt.data.success !== false
-    const detail = ok ? '✓' : (evt.data.error || '✗').slice(0, 80)
+    const errCode = evt.data.error_code || ''
+    const errMsg = (evt.data.error_message || '').slice(0, 80)
+    const retries = evt.data.retry_count ? ` (重试${evt.data.retry_count}次)` : ''
+    const detail = ok ? '✓' : `${errCode ? '[' + errCode + '] ' : ''}${errMsg || '✗'}${retries}`
     return { id, type: t, source: evt.source, label: (TOOL_LABELS[tool] || tool), detail, status: ok ? 'done' : 'error', time }
   }
   if (t === 'agent:completed') {

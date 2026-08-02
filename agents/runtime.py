@@ -305,7 +305,13 @@ class BaseAgent(ABC):
                 type=EventType.TOOL_CALL_END,
                 data={"agent_id": self.id, "tool": func_name,
                       "success": result.success,
-                      "lifecycle_stage": lc.stage.value},
+                      "lifecycle_stage": lc.stage.value,
+                      "error_code": result.error_code if not result.success else "",
+                      "error_message": result.error_message if not result.success else "",
+                      "phase": lc.stage.value,
+                      "retry_count": len([e for e in lc.error_manager.errors if e.tool_name == func_name and not e.recovered]),
+                      "recovery": vr.get("recovery_message", "")[:100] if not result.success else "",
+                      "duration_ms": round(result.duration_ms) if result.duration_ms else 0},
                 source=self.name,
             ))
 

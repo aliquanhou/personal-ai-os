@@ -345,21 +345,24 @@ def _ensure_event_bus_subscription():
     async def _fanout(event):
         sid = event.data.get("session_id", "")
         if sid and sid in _event_queues:
+            # Keep error/phase fields as-is for Timeline display
+            passthrough = {"error_code", "error_message", "lifecycle_stage", "phase",
+                          "retry_count", "recovery", "duration_ms", "goal_progress",
+                          "goal_count", "classification", "output_length", "verify_result"}
             payload = {
                 "type": event.type.value,
                 "source": event.source,
-                "data": {k: str(v)[:500] if isinstance(v, (dict, list)) else v
+                "data": {k: (v if k in passthrough else str(v)[:500] if isinstance(v, (dict, list)) else v)
                          for k, v in event.data.items()
                          if k not in ("args",)},
                 "timestamp": event.timestamp,
             }
-            # Include args for tool calls
             if "args" in event.data:
                 payload["args"] = {k: str(v)[:200] for k, v in event.data["args"].items()}
             try:
                 _event_queues[sid].put_nowait(payload)
             except asyncio.QueueFull:
-                pass  # Drop if client is slow
+                pass
 
     get_event_bus().on_any(_fanout)
     _event_bus_subscribed = True
@@ -554,12 +557,17 @@ async def chat_stream(req: ChatRequest):
                         lc.record_tool_result(fn, result.success, result.output or result.error or f"{fn} failed", fa)
 
                         try:
+                            errs = [e for e in (lc.error_manager.errors if hasattr(lc, 'error_manager') else []) if e.tool_name == fn and not e.recovered]
+                            rt = len(errs)
                             await bus.publish(Event(type=EventType.TOOL_CALL_END,
-                                data={"agent_id": agent.id, "tool": fn, "success": result.success, "session_id": session_id},
+                                data={"agent_id": agent.id, "tool": fn, "success": result.success,
+                                      "session_id": session_id, "error_code": result.error_code,
+                                      "error_message": result.error_message,
+                                      "lifecycle_stage": lc.stage.value, "retry_count": rt},
                                 source=agent.name))
                         except Exception: pass
 
-                        yield f"data: {_json.dumps({'type': 'tool_end', 'tool': fn, 'success': result.success, 'output': result.output[:300]})}\n\n"
+                        yield f"data: {_json.dumps({'type': 'tool_end', 'tool': fn, 'success': result.success, 'output': result.output[:300], 'error_code': result.error_code, 'error_message': result.error_message})}\n\n"
                         messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result.output if result.success else f"Error: {result.error or result.output}"})
                 else:
                     full_response = resp.get("content", "")
