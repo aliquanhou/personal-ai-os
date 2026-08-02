@@ -1,0 +1,9 @@
+{
+  "name": "test-v15",
+  "slug": "test-v15",
+  "description": "创建一个test_v15项目：1.创建目录 2.创建main.py 3.创建README.md 4.运行",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T17:57:18.420002+00:00",
+  "updated_at": "2026-08-02T17:57:18.420002+00:00"
+}

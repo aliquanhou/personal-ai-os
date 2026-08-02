@@ -204,10 +204,11 @@ class ToolResult:
     # ── Factory methods ───────────────────────────────────
 
     @classmethod
-    def ok(cls, stdout: str = "OK", data: dict | None = None,
+    def ok(cls, stdout: str = "OK", stderr: str = "", data: dict | None = None,
            duration_ms: float = 0.0) -> "ToolResult":
-        """Successful execution."""
-        return cls(success=True, stdout=stdout, data=data or {}, duration_ms=duration_ms)
+        """Successful execution. stderr for warnings (non-fatal)."""
+        return cls(success=True, stdout=stdout, stderr=stderr,
+                   data=data or {}, duration_ms=duration_ms)
 
     @classmethod
     def fail(cls, error_code: ToolErrorCode | str, error_message: str,
