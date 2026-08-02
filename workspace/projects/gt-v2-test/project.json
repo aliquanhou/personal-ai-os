@@ -1,0 +1,9 @@
+{
+  "name": "gt-v2-test",
+  "slug": "gt-v2-test",
+  "description": "创建一个测试项目。要求：1.创建目录 workspace/projects/gt-v2-test/ 2.创建 main.py 内容为 print(\"hello\") 3.创建 README.md 4.运行 python main.py 验证输出",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T17:32:52.939504+00:00",
+  "updated_at": "2026-08-02T17:32:52.939504+00:00"
+}

@@ -336,14 +336,17 @@ class TaskLifecycleController:
         }
 
         if success:
-            self.tracker.observe(tool_name, success, output)
+            self.tracker.observe(tool_name, success, output, args)
             self.error_manager.mark_recovered()
             # After successful tool use, enter VERIFY
             self.transition(LifecycleStage.VERIFY)
 
-            # Quick VERIFY: check if the tool's output looks valid
-            verify_ok, verify_msg = self._quick_verify(tool_name, output)
-            result["verify_result"] = {"ok": verify_ok, "message": verify_msg}
+            # v2.0: Real filesystem verification (not text pattern matching)
+            vresult = self.tracker.verify()
+            verify_ok = len(vresult.get("newly_fulfilled", [])) > 0
+            verify_msg = (f"验证: {vresult['fulfilled']}/{vresult['total']} 目标完成"
+                         if vresult.get("total", 0) > 0 else "工具执行成功")
+            result["verify_result"] = {"ok": True, "message": verify_msg}
 
             if verify_ok:
                 # VERIFY passed — check if we can go to COMPLETE

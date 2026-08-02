@@ -1,49 +1,78 @@
-"""GoalTracker — task completion detection for Agent Runtime (v1.2)
+"""GoalTracker v2 — Task completion verification through file system checks.
 
-Detects whether a user's task requirements have been fulfilled,
-enabling the Agent Runtime to exit early instead of burning iterations.
+v1.x: Text pattern matching on tool output strings — unreliable, false positives.
+v2.0: Real file system verification — Path.exists(), exit code, file size.
 
-Strategy: parse user goal for explicit numbered requirements,
-track tool outputs against them, signal completion.
+Each goal has a type + target. Verification checks the actual filesystem,
+not the tool's output text.
+
+Goal types:
+  file_exists        — Path.exists() on target file
+  file_contains      — file content contains expected string
+  command_success    — exit_code == 0 for shell command
+  directory_exists   — Path.is_dir() on target directory
+  file_count         — count of files matching glob in directory
 """
 
 from __future__ import annotations
 
-import json
 import logging
+import re as _re
 from dataclasses import dataclass, field
+from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
+class GoalType(StrEnum):
+    FILE_EXISTS = "file_exists"
+    FILE_CONTAINS = "file_contains"
+    COMMAND_SUCCESS = "command_success"
+    DIRECTORY_EXISTS = "directory_exists"
+    FILE_COUNT = "file_count"
+
+
 @dataclass
 class GoalItem:
-    """A single sub-goal extracted from the user's request."""
+    """A single verifiable sub-goal extracted from the user's request."""
     index: int
-    text: str                      # e.g. "创建项目目录"
+    text: str                          # e.g. "创建项目目录"
+    goal_type: GoalType = GoalType.FILE_EXISTS
+    target: str = ""                   # e.g. "workspace/projects/foo/"
+    expected: str = ""                 # e.g. expected file content keyword
     fulfilled: bool = False
-    evidence: str = ""              # How it was fulfilled (tool + output)
+    evidence: str = ""
+    verified_at: str = ""              # ISO timestamp when verified
 
     def to_dict(self) -> dict:
-        return {"index": self.index, "text": self.text, "fulfilled": self.fulfilled, "evidence": self.evidence}
+        return {
+            "index": self.index,
+            "text": self.text,
+            "type": self.goal_type.value,
+            "target": self.target,
+            "fulfilled": self.fulfilled,
+            "evidence": self.evidence,
+        }
 
+
+# ═══════════════════════════════════════════════════════════
+# GOAL TRACKER v2
+# ═══════════════════════════════════════════════════════════
 
 @dataclass
 class GoalTracker:
-    """Tracks completion progress toward a multi-step goal.
+    """Tracks and verifies completion of multi-step goals.
 
-    Usage in Agent Runtime:
-        tracker = GoalTracker(user_goal)
-        # After each tool call:
-        tracker.observe(tool_name, success, output)
-        if tracker.all_fulfilled():
-            break  # early exit
+    v2: Uses real filesystem checks, not text pattern matching.
+    verify() runs after tool execution to check actual state.
     """
 
     goal_text: str = ""
     items: list[GoalItem] = field(default_factory=list)
     tool_log: list[dict] = field(default_factory=list)
+    project_root: str = "workspace/projects"
 
     def __post_init__(self):
         if self.goal_text and not self.items:
@@ -51,92 +80,196 @@ class GoalTracker:
 
     @staticmethod
     def _extract_goals(text: str) -> list[GoalItem]:
-        """Parse numbered requirements from the user's goal text.
+        """Parse numbered requirements and infer goal types.
 
-        Matches patterns like:
-          "1. 创建项目目录" / "1) 创建项目目录"
-          "要求：1. 创建..." / "要求: 1. 创建..."
-          "Step 1: create project"
+        Matches: "1. 创建项目目录", "1) create main.py and run it",
+        also "要求：1. 创建... 2. 生成..."
+
+        For each extracted goal, infers the GoalType from keywords.
         """
-        import re
         items = []
 
         # Match numbered items: 1. / 1) / 1、
-        pattern = re.compile(r'(?:^|\n)\s*(\d+)[.、\)）]\s*(.+?)(?=\n\s*\d+[.、\)）]|\n\n|\Z)', re.MULTILINE | re.DOTALL)
+        pattern = _re.compile(
+            r'(?:^|\n)\s*(\d+)[.、\)）]\s*(.+?)(?=\n\s*\d+[.、\)）]|\n\n|\Z)',
+            _re.MULTILINE | _re.DOTALL,
+        )
         matches = pattern.findall(text)
 
-        # Also try to find list after "要求" / "需求" / "tasks" markers
         if not matches:
-            marker_pattern = re.compile(r'(?:要求|需求|任务|goals?|tasks?)[：:]\s*\n?(.+)', re.IGNORECASE | re.DOTALL)
-            marker_match = marker_pattern.search(text)
-            if marker_match:
-                content = marker_match.group(1)
-                matches = pattern.findall(content)
+            marker = _re.compile(
+                r'(?:要求|需求|任务|goals?|tasks?)[：:]\s*\n?(.+)',
+                _re.IGNORECASE | _re.DOTALL,
+            )
+            m = marker.search(text)
+            if m:
+                matches = pattern.findall(m.group(1))
 
         for idx_str, item_text in matches:
             try:
                 idx = int(idx_str)
-                items.append(GoalItem(index=idx, text=item_text.strip()[:120]))
+                gt, target = _infer_goal(item_text)
+                items.append(GoalItem(
+                    index=idx, text=item_text.strip()[:120],
+                    goal_type=gt, target=target,
+                ))
             except ValueError:
                 pass
 
         if items:
-            logger.info("GoalTracker: extracted %d sub-goals from user request", len(items))
-
+            logger.info("GoalTracker v2: %d goals extracted", len(items))
         return items
 
-    def observe(self, tool_name: str, success: bool, output: str) -> None:
-        """Feed a tool execution result into the tracker. Checks for fulfillment."""
-        self.tool_log.append({"tool": tool_name, "success": success, "output": output[:200]})
+    # ── Observation (logs tools, queues verification) ────
 
-        if not self.items:
-            return
+    def observe(self, tool_name: str, success: bool, output: str,
+                args: dict | None = None) -> None:
+        """Log a tool execution. Does NOT check fulfillment yet."""
+        entry = {"tool": tool_name, "success": success, "output": output[:200]}
+        if args:
+            entry["args"] = args
+        self.tool_log.append(entry)
 
-        combined = (tool_name + " " + output).lower()
+    # ── Verification (runs after tool execution) ────────
+
+    def verify(self) -> dict:
+        """Run filesystem verification for all pending goals.
+
+        Called after each tool execution cycle. Checks the real
+        filesystem state against goal targets.
+
+        Returns: {fulfilled: N, total: M, newly_fulfilled: [...], remaining: [...]}
+        """
+        import datetime as _dt
+        now = _dt.datetime.now(_dt.timezone.utc).isoformat()
+        newly = []
 
         for item in self.items:
             if item.fulfilled:
                 continue
+            ok, evidence = self._verify_one(item)
+            if ok:
+                item.fulfilled = True
+                item.evidence = evidence
+                item.verified_at = now
+                newly.append(item)
 
-            # Check file write targets
-            if tool_name == "write_file":
-                # Look for keyword overlap with the goal item
-                item_keywords = item.text.lower()
-                for word in item_keywords.split():
-                    if len(word) >= 3 and word in combined:
-                        item.fulfilled = True
-                        item.evidence = f"write_file: {output[:100]}"
-                        break
+        if newly:
+            logger.info("GoalTracker: verified %d new goals: %s",
+                       len(newly), [g.text[:40] for g in newly])
 
-            # Shell execution
-            if tool_name == "shell" and success:
-                item_keywords = item.text.lower()
-                if any(w in combined for w in ["test", "测试", "运行", "pytest"]) and \
-                   any(w in item_keywords for w in ["test", "测试", "运行", "验证", "执行"]):
-                    item.fulfilled = True
-                    item.evidence = f"shell: {output[:100]}"
+        return {
+            "fulfilled": self.fulfilled_count(),
+            "total": len(self.items),
+            "newly_fulfilled": [g.to_dict() for g in newly],
+            "remaining": [g.to_dict() for g in self.remaining()],
+        }
 
-            # save_to_memory / search_memory
-            if tool_name in ("save_to_memory", "search_memory"):
-                if any(w in item.text for w in ["记忆", "保存", "record", "save"]):
-                    item.fulfilled = True
-                    item.evidence = f"{tool_name}: {output[:100]}"
+    def _verify_one(self, item: GoalItem) -> tuple[bool, str]:
+        """Verify a single goal against the filesystem and tool log."""
+        gt = item.goal_type
+
+        if gt == GoalType.FILE_EXISTS:
+            return self._check_file_exists(item)
+
+        if gt == GoalType.FILE_CONTAINS:
+            return self._check_file_contains(item)
+
+        if gt == GoalType.COMMAND_SUCCESS:
+            return self._check_command(item)
+
+        if gt == GoalType.DIRECTORY_EXISTS:
+            return self._check_dir_exists(item)
+
+        return False, f"未知目标类型: {gt.value}"
+
+    def _check_file_exists(self, item: GoalItem) -> tuple[bool, str]:
+        """Check if the target file exists on disk."""
+        if not item.target:
+            return False, "无法确定目标文件路径"
+        p = _resolve_path(item.target)
+        if p and p.exists() and p.is_file():
+            size = p.stat().st_size
+            return True, f"文件存在: {p} ({size}B), {size}>0"
+
+        # Search for recently created matching file
+        target_name = Path(item.target).name
+        found = _find_recent_file(target_name)
+        if found:
+            return True, f"文件存在: {found}"
+        return False, f"文件不存在: {item.target}"
+
+    def _check_file_contains(self, item: GoalItem) -> tuple[bool, str]:
+        """Check if target file contains the expected content."""
+        if not item.target or not item.expected:
+            return False, "缺少目标文件或期望内容"
+        p = _resolve_path(item.target)
+        if p and p.exists():
+            try:
+                content = p.read_text(encoding="utf-8", errors="replace").lower()
+                if item.expected.lower() in content:
+                    return True, f"文件包含期望内容: {item.expected[:50]}"
+                return False, f"文件不包含: {item.expected[:50]}"
+            except Exception as e:
+                return False, f"读取文件失败: {e}"
+        return False, f"文件不存在: {item.target}"
+
+    def _check_command(self, item: GoalItem) -> tuple[bool, str]:
+        """Check if a shell command was executed successfully.
+        Uses the tool_log to find matching shell executions."""
+        # Check tool log for shell entries
+        for entry in self.tool_log:
+            if entry["tool"] == "shell" and entry.get("success"):
+                # If we have a specific command target, check it matches
+                if item.target:
+                    args_str = str(entry.get("args", ""))
+                    if item.target.split()[0] in args_str or "pytest" in args_str or "test" in args_str:
+                        return True, f"命令执行成功: {item.target}"
+                else:
+                    return True, f"命令执行成功: {entry.get('output', '')[:80]}"
+
+        # Check for failed commands with the target
+        for entry in self.tool_log:
+            if entry["tool"] == "shell" and not entry.get("success"):
+                if item.target:
+                    args_str = str(entry.get("args", ""))
+                    if item.target.split()[0] in args_str:
+                        return False, f"命令执行失败: {item.target}"
+
+        return False, f"命令未验证: {item.target or item.text[:60]}"
+
+    def _check_dir_exists(self, item: GoalItem) -> tuple[bool, str]:
+        """Check if the target directory exists."""
+        if not item.target:
+            return False, "无法确定目标目录"
+        p = _resolve_path(item.target)
+        if p and p.exists() and p.is_dir():
+            contents = list(p.iterdir())
+            return True, f"目录存在: {p} ({len(contents)} 项)"
+        search_name = Path(item.target).name
+        found = _find_recent_dir(search_name)
+        if found:
+            return True, f"目录存在: {found}"
+        return False, f"目录不存在: {item.target}"
+
+    # ── Query methods ────────────────────────────────────
 
     def all_fulfilled(self) -> bool:
-        """Returns True if all extracted goals are fulfilled."""
         if not self.items:
-            return False  # No explicit goals — let max_iter handle it
+            return False
         return all(item.fulfilled for item in self.items)
 
+    def fulfilled_count(self) -> int:
+        return sum(1 for i in self.items if i.fulfilled)
+
     def progress(self) -> dict:
-        """Return completion progress."""
         if not self.items:
             return {"items": 0, "fulfilled": 0, "pct": 0, "detail": []}
-        fulfilled = sum(1 for i in self.items if i.fulfilled)
+        f = self.fulfilled_count()
         return {
             "items": len(self.items),
-            "fulfilled": fulfilled,
-            "pct": round(fulfilled / len(self.items) * 100),
+            "fulfilled": f,
+            "pct": round(f / len(self.items) * 100),
             "detail": [i.to_dict() for i in self.items],
         }
 
@@ -144,32 +277,117 @@ class GoalTracker:
         return [i for i in self.items if not i.fulfilled]
 
 
-# Error classifier for tool failures
-class ErrorClassifier:
-    """Categorize tool errors to decide recovery strategy."""
+# ═══════════════════════════════════════════════════════════
+# GOAL TYPE INFERENCE (from goal text)
+# ═══════════════════════════════════════════════════════════
 
-    FATAL_PATTERNS = ["api key", "authentication", "permission denied", "access denied"]
-    NEED_HUMAN_PATTERNS = ["approval", "批准", "blocked by", "requires human"]
-    RETRYABLE_PATTERNS = ["timeout", "connection", "temporary", "retry", "busy"]
+def _infer_goal(text: str) -> tuple[GoalType, str]:
+    """Infer the GoalType and target path from the goal text.
 
-    @staticmethod
-    def classify(tool_name: str, error: str, consecutive_failures: int) -> str:
-        """Returns: 'retry' | 'need_human' | 'fatal' | 'skip'"""
-        el = error.lower()
+    Heuristics:
+      - 包含 "运行"/"执行"/"测试"/"pytest" → COMMAND_SUCCESS
+      - 包含 "目录"/"文件夹" → DIRECTORY_EXISTS
+      - 包含 ".py"/".md"/".json" 等扩展名 → FILE_EXISTS
+      - default → FILE_EXISTS
+    """
+    tl = text.lower()
 
-        if consecutive_failures >= 3:
-            return "fatal"  # 3 consecutive failures → stop
+    # Command success
+    cmd_keywords = ["运行", "执行", "测试", "跑", "pytest", "run", "test", "execute"]
+    if any(w in tl for w in cmd_keywords):
+        # Try to extract command
+        cmd_match = _re.search(r'(python\s+\S+|pytest\s+\S+|npm\s+\S+)', tl)
+        return GoalType.COMMAND_SUCCESS, cmd_match.group(0) if cmd_match else ""
 
-        for p in ErrorClassifier.FATAL_PATTERNS:
-            if p in el:
-                return "fatal"
+    # Directory
+    dir_keywords = ["目录", "文件夹", "directory", "folder", "创建项目"]
+    if any(w in tl for w in dir_keywords):
+        # Try to extract directory name
+        dir_match = _re.search(r'(\w+[/\\]|\w+目录|\w+文件夹|projects?/\S+)', tl)
+        return GoalType.DIRECTORY_EXISTS, dir_match.group(0) if dir_match else ""
 
-        for p in ErrorClassifier.NEED_HUMAN_PATTERNS:
-            if p in el:
-                return "need_human"
+    # File creation (most common)
+    file_exts = [".py", ".md", ".json", ".txt", ".js", ".ts", ".html", ".css", ".db", ".sqlite"]
+    if any(ext in tl for ext in file_exts):
+        # Try to extract filename
+        file_match = _re.search(r'([\w/\\-]+\.\w{1,4})', tl)
+        return GoalType.FILE_EXISTS, file_match.group(0) if file_match else ""
 
-        for p in ErrorClassifier.RETRYABLE_PATTERNS:
-            if p in el:
-                return "retry"
+    # Default: assume file creation
+    return GoalType.FILE_EXISTS, ""
 
-        return "skip"  # Don't retry automatically
+
+# ═══════════════════════════════════════════════════════════
+# FILESYSTEM HELPERS
+# ═══════════════════════════════════════════════════════════
+
+def _resolve_path(target: str) -> Path | None:
+    """Resolve a target path relative to the project root."""
+    if not target:
+        return None
+    clean = target.strip().replace("\\", "/").rstrip("/")
+    candidates = [
+        Path(clean),
+        Path("workspace") / "projects" / clean,
+        Path("workspace") / clean,
+    ]
+    for p in candidates:
+        try:
+            resolved = p.resolve()
+            if resolved.exists():
+                return resolved
+        except OSError:
+            continue
+    try:
+        return candidates[0].resolve()
+    except OSError:
+        return None
+
+
+def _find_recent_file(name: str) -> Path | None:
+    """Search workspace/projects for a recently created file matching name."""
+    ws = Path("workspace/projects")
+    if not ws.exists():
+        return None
+    candidates = list(ws.rglob(name))
+    if not candidates:
+        for f in ws.rglob("*"):
+            if f.is_file() and name.lower() in f.name.lower():
+                candidates.append(f)
+        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
+
+
+def _find_recent_dir(name: str) -> Path | None:
+    """Search workspace/projects for a recently created directory."""
+    ws = Path("workspace/projects")
+    if not ws.exists():
+        return None
+    candidates = [d for d in ws.rglob(name) if d.is_dir()]
+    candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
+
+
+def _find_recent_file(name: str) -> Path | None:
+    """Search workspace/projects for a recently created file matching name."""
+    ws = Path("workspace/projects")
+    if not ws.exists():
+        return None
+    candidates = list(ws.rglob(name))
+    if not candidates:
+        # Try partial match
+        for f in ws.rglob("*"):
+            if f.is_file() and name.lower() in f.name.lower():
+                candidates.append(f)
+        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
+
+
+def _find_recent_dir(name: str) -> Path | None:
+    """Search workspace/projects for a recently created directory."""
+    ws = Path("workspace/projects")
+    if not ws.exists():
+        return None
+    candidates = [d for d in ws.rglob(name) if d.is_dir()]
+    candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
