@@ -1,0 +1,9 @@
+{
+  "name": "web_downloader",
+  "slug": "web_downloader",
+  "description": "网页下载脚本 - 支持重定向、User-Agent、异常捕获、文件写入",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T10:33:15.004861+00:00",
+  "updated_at": "2026-08-02T10:33:15.004861+00:00"
+}

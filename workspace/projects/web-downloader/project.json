@@ -1,0 +1,9 @@
+{
+  "name": "web-downloader",
+  "slug": "web-downloader",
+  "description": "明确脚本功能：输入URL、输出文件路径、处理HTTP错误、设置超时、保存为HTML或文本格式。确定脚本的输入参数和输出格式。",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T10:32:18.595511+00:00",
+  "updated_at": "2026-08-02T10:32:18.595511+00:00"
+}

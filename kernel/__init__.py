@@ -10,19 +10,33 @@ from kernel.permission import (
     ResourceType,
     get_permission_manager,
 )
+# Sprint 3
+from kernel.registry import (
+    AgentDescriptor,
+    AgentRegistry,
+    Capability,
+    MemoryScope,
+    Permission as AgentPermission,
+    get_agent_registry,
+)
+from kernel.task_graph import (
+    NodeState,
+    TaskGraph,
+    TaskGraphStore,
+    TaskNode,
+    get_task_graph_store,
+)
+from kernel.router import AgentRouter, RoutePlan, get_agent_router
 
 __all__ = [
-    "Config",
-    "get_config",
-    "set_config",
-    "Event",
-    "EventBus",
-    "EventType",
-    "get_event_bus",
-    "Permission",
-    "PermissionCheck",
-    "PermissionLevel",
-    "PermissionManager",
-    "ResourceType",
-    "get_permission_manager",
+    "Config", "get_config", "set_config",
+    "Event", "EventBus", "EventType", "get_event_bus",
+    "Permission", "PermissionCheck", "PermissionLevel",
+    "PermissionManager", "ResourceType", "get_permission_manager",
+    # Sprint 3
+    "AgentDescriptor", "AgentRegistry", "Capability", "MemoryScope",
+    "AgentPermission", "get_agent_registry",
+    "NodeState", "TaskGraph", "TaskGraphStore", "TaskNode",
+    "get_task_graph_store",
+    "AgentRouter", "RoutePlan", "get_agent_router",
 ]

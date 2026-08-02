@@ -1,13 +1,15 @@
 """Personal AI OS API Server — FastAPI Application
 
-Sprint 1: CEO Agent orchestration, Task State Machine, Reflection, Daily Briefing.
+Sprint 3: Agent Organization Layer — Registry + Router + Task Graph.
 
 The API exposes all Personal AI OS capabilities:
-- Chat with CEO agent (default)
+- Chat with CEO agent (default), now with smart routing
 - Identity & Boss Profile management
 - Task lifecycle management
 - Memory search & management
 - Daily briefing generation
+- Agent Registry & Team management
+- Task Graph orchestration
 """
 
 import logging
@@ -27,6 +29,15 @@ from agents.project_manager import ProjectManagerAgent
 from agents.reflection import ReflectionAgent
 from agents.runtime import get_agent_runtime
 from kernel.config import get_config
+from kernel.registry import (
+    AgentDescriptor,
+    AgentRegistry,
+    Capability,
+    MemoryScope,
+    Permission as AgentPermission,
+    get_agent_registry,
+)
+from kernel.router import AgentRouter, RoutePlan, get_agent_router
 from kernel.workspace import get_workspace, WorkspaceManager
 from memory.manager import get_memory
 from tools.registry import get_tool_registry
@@ -38,8 +49,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Personal AI OS",
-    description="Your personal AI operating system — AI Chief of Staff",
-    version="0.2.0",
+    description="Your personal AI operating system — AI Company Organization",
+    version="0.3.0",
 )
 
 app.add_middleware(
@@ -55,18 +66,110 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    """Register all agents on startup."""
+    """Register all agents in both Runtime and AgentRegistry (Sprint 3)."""
     runtime = get_agent_runtime()
-    runtime.register(CEOAgent())
-    runtime.register(ProjectManagerAgent())
-    runtime.register(CodingAgent())
-    runtime.register(ResearchAgent())
-    runtime.register(WritingAgent())
-    runtime.register(ReflectionAgent())
+    registry = get_agent_registry()
+
+    # ── Create agent instances ──
+    ceo = CEOAgent()
+    pm = ProjectManagerAgent()
+    coder = CodingAgent()
+    researcher = ResearchAgent()
+    writer = WritingAgent()
+    reflector = ReflectionAgent()
+
+    # ── Register in Runtime (existing) ──
+    for a in [ceo, pm, coder, researcher, writer, reflector]:
+        runtime.register(a)
+
+    # ── Register in AgentRegistry (Sprint 3: formal descriptors) ──
+    registry.register(AgentDescriptor(
+        name="ceo", description="AI 幕僚长 — 理解目标、制定策略、协调团队、每日简报",
+        capabilities=[Capability.ORCHESTRATION, Capability.STRATEGY, Capability.DECISION_MAKING,
+                      Capability.TASK_ROUTING, Capability.BRIEFING, Capability.MEMORY_READ,
+                      Capability.MEMORY_WRITE, Capability.REFLECTION,
+                      Capability.PROJECT_PLANNING, Capability.ANALYSIS],
+        permissions=[AgentPermission.MEMORY_READ, AgentPermission.MEMORY_WRITE,
+                     AgentPermission.READ_WORKSPACE, AgentPermission.WRITE_WORKSPACE,
+                     AgentPermission.MANAGE_AGENTS],
+        memory_scope=[MemoryScope.ALL],
+        tier="ceo",
+        input_formats=["goal", "question", "command"],
+        output_formats=["strategy", "plan", "briefing", "decision"],
+        agent_ref=ceo,
+    ))
+
+    registry.register(AgentDescriptor(
+        name="project_manager", description="项目管理 — 将目标转化为结构化项目计划和任务",
+        capabilities=[Capability.PROJECT_PLANNING, Capability.TASK_EXECUTION,
+                      Capability.FILE_OPS, Capability.MEMORY_WRITE, Capability.ANALYSIS],
+        permissions=[AgentPermission.MEMORY_READ, AgentPermission.MEMORY_WRITE,
+                     AgentPermission.READ_WORKSPACE, AgentPermission.WRITE_WORKSPACE],
+        memory_scope=[MemoryScope.PROJECTS, MemoryScope.TASKS, MemoryScope.KNOWLEDGE],
+        tier="manager",
+        input_formats=["goal", "project_brief"],
+        output_formats=["plan", "task_list", "project"],
+        agent_ref=pm,
+    ))
+
+    registry.register(AgentDescriptor(
+        name="coding_agent", description="代码专家 — 编写、审查、调试代码",
+        capabilities=[Capability.CODE_GENERATION, Capability.CODE_REVIEW,
+                      Capability.CODE_DEBUG, Capability.FILE_OPS, Capability.SHELL_EXEC,
+                      Capability.TASK_EXECUTION],
+        permissions=[AgentPermission.READ_WORKSPACE, AgentPermission.WRITE_WORKSPACE,
+                     AgentPermission.EXEC_SHELL_SAFE],
+        memory_scope=[MemoryScope.KNOWLEDGE, MemoryScope.EXPERIENCES, MemoryScope.PROJECTS],
+        tier="specialist",
+        input_formats=["task", "code", "bug_report"],
+        output_formats=["code", "fix", "review"],
+        agent_ref=coder,
+    ))
+
+    registry.register(AgentDescriptor(
+        name="research_agent", description="研究分析 — 搜索信息、分析市场、综合发现",
+        capabilities=[Capability.RESEARCH, Capability.ANALYSIS, Capability.WRITING,
+                      Capability.MEMORY_READ, Capability.WEB_SEARCH],
+        permissions=[AgentPermission.MEMORY_READ, AgentPermission.MEMORY_WRITE,
+                     AgentPermission.READ_WORKSPACE, AgentPermission.EXTERNAL_NETWORK],
+        memory_scope=[MemoryScope.KNOWLEDGE, MemoryScope.DECISIONS, MemoryScope.EXPERIENCES],
+        tier="specialist",
+        input_formats=["question", "topic", "market"],
+        output_formats=["report", "analysis", "summary"],
+        agent_ref=researcher,
+    ))
+
+    registry.register(AgentDescriptor(
+        name="writing_agent", description="写作助手 — 撰写文档、报告、内容创作",
+        capabilities=[Capability.WRITING, Capability.FILE_OPS, Capability.MEMORY_READ],
+        permissions=[AgentPermission.READ_WORKSPACE, AgentPermission.WRITE_WORKSPACE],
+        memory_scope=[MemoryScope.KNOWLEDGE, MemoryScope.CONVERSATIONS],
+        tier="specialist",
+        input_formats=["topic", "outline", "notes"],
+        output_formats=["document", "article", "report"],
+        agent_ref=writer,
+    ))
+
+    registry.register(AgentDescriptor(
+        name="reflection_agent", description="反思教练 — 任务后深度分析，提炼经验教训",
+        capabilities=[Capability.REFLECTION, Capability.ANALYSIS,
+                      Capability.MEMORY_READ, Capability.MEMORY_WRITE],
+        permissions=[AgentPermission.MEMORY_READ, AgentPermission.MEMORY_WRITE],
+        memory_scope=[MemoryScope.EXPERIENCES, MemoryScope.DECISIONS, MemoryScope.TASKS],
+        tier="utility",
+        input_formats=["task_result", "execution_log"],
+        output_formats=["reflection", "lesson", "improvement_plan"],
+        agent_ref=reflector,
+    ))
+
+    # Build default teams
+    registry.build_default_teams()
 
     config = get_config()
-    logger.info("Personal AI OS v0.2.0 starting on %s:%s", config.server.host, config.server.port)
-    logger.info("Agents: %s", [a["name"] for a in runtime.list_agents()])
+    logger.info("Personal AI OS v0.3.0 starting on %s:%s", config.server.host, config.server.port)
+    logger.info("Agent Runtime: %s", [a["name"] for a in runtime.list_agents()])
+    logger.info("Agent Registry: %s agents, %s teams",
+                len(registry.list_all()), len(registry.list_teams()))
 
 
 # ── Models ─────────────────────────────────────────────
@@ -152,7 +255,7 @@ class ProjectCreate(BaseModel):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.2.0", "name": "Personal AI OS"}
+    return {"status": "ok", "version": "0.3.0", "name": "Personal AI OS"}
 
 
 # ── Routes: Chat ───────────────────────────────────────
@@ -518,6 +621,158 @@ async def get_project(project_id: str):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
+
+
+# ── Sprint 3: Organization Routes ────────────────────
+
+@app.get("/api/org/registry")
+async def get_agent_registry_info():
+    """Get the full agent registry with capabilities."""
+    registry = get_agent_registry()
+    return {
+        "agents": [d.to_dict() for d in registry.list_all()],
+        "teams": registry.list_teams(),
+    }
+
+
+@app.get("/api/org/agents/{agent_name}")
+async def get_agent_descriptor(agent_name: str):
+    """Get a single agent's capability descriptor."""
+    registry = get_agent_registry()
+    desc = registry.get(agent_name)
+    if not desc:
+        raise HTTPException(status_code=404, detail=f"Agent not found: {agent_name}")
+    return desc.to_dict()
+
+
+@app.get("/api/org/agents/by-capability/{capability}")
+async def find_agents_by_capability(capability: str):
+    """Find agents with a specific capability."""
+    try:
+        cap = Capability(capability)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Unknown capability: {capability}")
+    registry = get_agent_registry()
+    return {"agents": [d.to_dict() for d in registry.find_by_capability(cap)]}
+
+
+@app.get("/api/org/teams")
+async def list_teams():
+    """List available team configurations."""
+    registry = get_agent_registry()
+    return {"teams": registry.list_teams()}
+
+
+@app.get("/api/org/teams/{team_name}")
+async def get_team(team_name: str):
+    """Get agents in a named team."""
+    registry = get_agent_registry()
+    team = registry.get_team(team_name)
+    return {"team": team_name, "agents": [d.to_dict() for d in team]}
+
+
+@app.post("/api/org/teams")
+async def create_team(team_name: str, agent_names: list[str]):
+    """Define a new team configuration."""
+    registry = get_agent_registry()
+    registry.define_team(team_name, agent_names)
+    return {"status": "created", "team": team_name, "agents": agent_names}
+
+
+# ── Sprint 3: Router & Task Graph ──────────────────────
+
+@app.post("/api/org/plan")
+async def plan_goal(goal: str):
+    """Analyze a goal and produce a RoutePlan (no execution).
+
+    Returns the task breakdown and agent assignments without executing.
+    """
+    router = get_agent_router()
+    plan = await router.plan(goal)
+
+    graph_dict = plan.graph.to_dict() if plan.graph else None
+
+    return {
+        "goal": plan.goal,
+        "analysis": plan.analysis[:500],
+        "agent_assignments": plan.agent_assignments,
+        "execution_order": plan.execution_order,
+        "estimated_duration": plan.estimated_duration,
+        "graph": graph_dict,
+    }
+
+
+@app.post("/api/org/execute")
+async def execute_goal(goal: str, session_id: str = "", project_slug: str = ""):
+    """Plan AND execute a goal using the optimal agent team.
+
+    This is the full orchestrated execution path:
+    analyze → plan → build graph → dispatch → execute → collect results.
+    """
+    router = get_agent_router()
+    plan = await router.plan(goal)
+    result = await router.execute_plan(plan, session_id, project_slug)
+    return result
+
+
+@app.get("/api/org/graphs")
+async def list_task_graphs():
+    """List all task graphs."""
+    store = get_task_graph_store()
+    return {"graphs": store.list_all()}
+
+
+@app.get("/api/org/graphs/{graph_id}")
+async def get_task_graph(graph_id: str):
+    """Get a specific task graph with progress."""
+    store = get_task_graph_store()
+    graph = store.get(graph_id)
+    if not graph:
+        raise HTTPException(status_code=404, detail="Graph not found")
+    return graph.to_dict()
+
+
+# ── Sprint 3: Smart Chat (routed) ──────────────────────
+
+class SmartChatRequest(BaseModel):
+    message: str
+    session_id: str = ""
+    project_slug: str = ""
+    mode: str = "auto"  # auto / single / team
+    agent: str = ""       # Preferred agent (mode=single)
+    team: str = ""         # Team name (mode=team)
+
+
+@app.post("/api/chat/smart")
+async def smart_chat(req: SmartChatRequest):
+    """Smart chat with automatic routing.
+
+    mode=auto: Router picks the best agent(s).
+    mode=single: Use a specific agent.
+    mode=team: Use a named team.
+    """
+    router = get_agent_router()
+    session_id = req.session_id or str(uuid.uuid4())[:8]
+
+    if req.mode == "single" and req.agent:
+        result = await router.quick_route(
+            req.message, session_id, preferred_agent=req.agent
+        )
+    elif req.mode == "team" and req.team:
+        # Plan with team constraint — use team agents only for planning, then execute
+        plan = router.plan(req.message)
+        result = await router.execute_plan(plan, session_id, req.project_slug)
+    else:
+        # Auto: route to best single agent for simple tasks, or full team for complex
+        plan = router.plan(req.message)
+        # Use quick_route for simplicity unless goal is clearly multi-step
+        result = await router.quick_route(req.message, session_id)
+
+    return {
+        "session_id": session_id,
+        "mode": req.mode,
+        "result": result,
+    }
 
 
 # ── Static Files (Studio) ──────────────────────────────
