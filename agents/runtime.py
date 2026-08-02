@@ -204,6 +204,8 @@ class BaseAgent(ABC):
             pass
 
         messages = [{"role": "system", "content": base_prompt}]
+        # v1.5.2: Team roster — so every agent knows their colleagues
+        messages.append({"role": "system", "content": self._build_team_roster()})
         if ctx.handoff_context:
             hc = ctx.handoff_context
             messages.append({"role": "system", "content": (
@@ -458,6 +460,24 @@ class BaseAgent(ABC):
     # ═══════════════════════════════════════════════════════
     # UTILITIES
     # ═══════════════════════════════════════════════════════
+
+    @staticmethod
+    def _build_team_roster() -> str:
+        """Build the agent team roster for injection into system prompt."""
+        from kernel.registry import get_agent_registry
+        registry = get_agent_registry()
+        agents = registry.list_all()
+        if not agents:
+            agents = get_agent_runtime().list_agents()
+            lines = ["## 🤖 你的团队成员\n"]
+            for a in agents:
+                lines.append(f"- **{a.get('name', a.get('id', '?'))}**: {a.get('description', '')}")
+        else:
+            lines = ["## 🤖 你的团队成员\n"]
+            for a in agents:
+                lines.append(f"- **{a.name}** [{a.tier}]: {a.description}")
+        lines.append(f"\n共 {len(agents)} 名成员。你是其中之一。\n")
+        return "\n".join(lines)
 
     async def _emit_lifecycle(self, lc, action: str, session_id: str,
                              extra: dict | None = None) -> None:
