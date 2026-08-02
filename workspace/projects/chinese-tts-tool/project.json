@@ -1,0 +1,9 @@
+{
+  "name": "chinese-tts-tool",
+  "slug": "chinese-tts-tool",
+  "description": "中文 TTS 工具原型：调用中国最廉价仿真人 API（火山引擎/豆包），支持多供应商可插拔",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T20:29:49.563498+00:00",
+  "updated_at": "2026-08-02T20:29:49.563498+00:00"
+}

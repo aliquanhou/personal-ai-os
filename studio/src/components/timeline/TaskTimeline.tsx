@@ -111,7 +111,7 @@ export default function TaskTimeline() {
         lastRole = 'assistant'
         historySteps.push({
           id: ++histId, type: 'agent:completed', source: (msg as any).agent || 'ceo',
-          label: '任务完成', detail: `${(msg as any).iterations || '?'} iterations · ${((msg as any).toolCalls || []).length} tools`,
+          label: '任务完成', detail: `${(msg as any).iterations ?? '-'} iterations · ${((msg as any).toolCalls || []).length} tools`,
           status: 'done', time: new Date(msg.timestamp).toLocaleTimeString(),
         })
       }
