@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Agents — Package Init"""
 
 from agents.runtime import (

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Agent — CEO / Chief of Staff
 
 Sprint 1: The top-level orchestrator.

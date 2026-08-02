@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Event Bus
 
 A lightweight pub/sub event system that connects all components.

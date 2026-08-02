@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Skill Router (Sprint 6.5)
 
 Matches task requirements to available skills using capability + rating scoring.

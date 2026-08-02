@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS — Main Entry Point
 
 Start the full Personal AI OS server:

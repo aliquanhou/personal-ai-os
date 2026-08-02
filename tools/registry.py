@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Tools — Tool Registry & Built-in Tools v1.4
 
 All tools return the unified kernel.ToolResult contract.

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Agent — Reflection Agent
 
 Sprint 1: Post-task reflection and learning.

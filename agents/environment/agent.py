@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Agent — Environment Agent (Sprint 7.1)
 
 System diagnostic agent. Detects the runtime environment, diagnoses problems,

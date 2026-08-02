@@ -454,6 +454,126 @@ async def chat(req: ChatRequest):
     )
 
 
+# ── Routes: Stream Chat (SSE) ─────────────────────────
+
+@app.post("/api/chat/stream")
+async def chat_stream(req: ChatRequest):
+    """Streaming chat -- SSE that sends text tokens + tool events in real time."""
+    runtime = get_agent_runtime()
+    memory = get_memory()
+    session_id = req.session_id or str(uuid.uuid4())[:8]
+
+    # Save user message
+    memory.save_message(session_id, "user", req.message)
+
+    async def generate():
+        agent = runtime.get(req.agent)
+        if not agent:
+            yield f"data: {_json.dumps({'type': 'error', 'message': 'Agent not found'})}\n\n"
+            return
+
+        from agents.runtime import AgentContext
+        from kernel.workspace import get_workspace
+        from kernel.lifecycle import TaskLifecycleController, LifecycleStage
+        from kernel.skill_executor import get_skill_executor
+
+        ctx_mode = runtime._detect_context_mode(req.message)
+        mem_ctx = agent.memory.get_memory_context(query=req.message, context_mode=ctx_mode)
+
+        if req.project_slug:
+            get_workspace().create_project(req.project_slug, description=req.message[:200])
+
+        ctx = AgentContext(
+            session_id=session_id, goal=req.message,
+            user_profile=agent.memory.get_profile(),
+            memory_context=mem_ctx, project_slug=req.project_slug or "",
+            context_mode=ctx_mode,
+        )
+
+        yield f"data: {_json.dumps({'type': 'session', 'session_id': session_id})}\n\n"
+
+        full_response = ""
+        tool_log: list[dict] = []
+
+        try:
+            base = agent.system_prompt(ctx)
+            try:
+                base = get_skill_executor().inject_into_context(agent.name, base)
+            except Exception:
+                pass
+
+            messages = [
+                {"role": "system", "content": base},
+                {"role": "system", "content": agent._build_team_roster()},
+                {"role": "user", "content": req.message},
+            ]
+
+            lc = TaskLifecycleController(req.message, max_iterations=30)
+            if lc.tracker.items:
+                ctx.goal_tracker = lc.tracker
+            lc.transition(LifecycleStage.PLAN)
+
+            iteration = 0
+            while lc.can_continue() and iteration < 30:
+                iteration += 1
+                lc.advance_iteration()
+                yield f"data: {_json.dumps({'type': 'thinking', 'iteration': iteration, 'stage': lc.stage.value})}\n\n"
+
+                resp = await agent.llm.chat(messages, tools=agent.tools.list_definitions())
+
+                if resp.get("tool_calls"):
+                    messages.append({"role": "assistant", "content": resp.get("content", ""), "tool_calls": resp["tool_calls"]})
+
+                    for tc in resp["tool_calls"]:
+                        fn = tc["function"]["name"]
+                        try:
+                            fa = json.loads(tc["function"]["arguments"])
+                        except json.JSONDecodeError:
+                            fa = {}
+
+                        yield f"data: {_json.dumps({'type': 'tool_start', 'tool': fn, 'args': {k: str(v)[:200] for k, v in fa.items()}})}\n\n"
+
+                        approval = agent.tools.check_approval(fn, fa)
+                        if approval.blocked or approval.needs_approval:
+                            msg = f"Blocked: {approval.reason}" if approval.blocked else f"Waiting: {approval.reason}"
+                            tool_log.append({"tool": fn, "args": fa, "success": False, "output": msg})
+                            messages.append({"role": "tool", "tool_call_id": tc["id"], "content": msg})
+                            yield f"data: {_json.dumps({'type': 'tool_end', 'tool': fn, 'success': False, 'output': msg})}\n\n"
+                            continue
+
+                        result = await agent.tools.execute(tool_name=fn, **fa)
+                        tool_log.append({"tool": fn, "args": fa, "success": result.success, "output": result.output[:500]})
+                        lc.record_tool_result(fn, result.success, result.output or result.error or f"{fn} failed", fa)
+                        yield f"data: {_json.dumps({'type': 'tool_end', 'tool': fn, 'success': result.success, 'output': result.output[:300]})}\n\n"
+                        messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result.output if result.success else f"Error: {result.error or result.output}"})
+                else:
+                    full_response = resp.get("content", "")
+                    words = full_response.split(" ")
+                    for i in range(0, len(words), 3):
+                        chunk = " ".join(words[i:i+3])
+                        yield f"data: {_json.dumps({'type': 'text', 'content': chunk + ' '})}\n\n"
+                        await asyncio.sleep(0.02)
+
+                    messages.append({"role": "assistant", "content": full_response})
+                    progress = lc.tracker.progress() if lc.tracker.items else {"fulfilled": 0, "items": 0}
+                    yield f"data: {_json.dumps({'type': 'done', 'response': full_response, 'iterations': iteration, 'tool_calls': tool_log, 'progress': progress})}\n\n"
+                    break
+            else:
+                yield f"data: {_json.dumps({'type': 'done', 'response': full_response or 'Max iterations', 'iterations': iteration, 'tool_calls': tool_log})}\n\n"
+
+            if full_response:
+                memory.save_message(session_id, "assistant", full_response, {"agent": req.agent, "iterations": iteration, "tool_calls": tool_log})
+
+        except Exception as e:
+            yield f"data: {_json.dumps({'type': 'error', 'message': str(e)[:200]})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no", "Access-Control-Allow-Origin": "*"},
+    )
+
+
 # ── Routes: Agents ─────────────────────────────────────
 
 @app.get("/api/agents")

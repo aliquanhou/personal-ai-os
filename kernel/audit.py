@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Agent Audit Log (Sprint 5)
 
 Enterprise-grade audit trail for every decision, action, and state change.

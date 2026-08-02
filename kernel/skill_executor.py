@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Skill Executor (Sprint 6.5)
 
 Injects skill prompts into AgentContext at runtime. The bridge between

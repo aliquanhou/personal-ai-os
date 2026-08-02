@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Agent Runtime — Agent Base & Lifecycle v1.5
 
 Refactored: BaseAgent.run() split into 6 focused methods.

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Experiment Runner (Sprint 6)
 
 A/B testing infrastructure for improvement proposals.

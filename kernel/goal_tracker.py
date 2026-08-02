@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """GoalTracker v2 — Task completion verification through file system checks.
 
 v1.x: Text pattern matching on tool output strings — unreliable, false positives.

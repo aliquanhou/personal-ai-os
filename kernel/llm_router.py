@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Agent Runtime — LLM Router
 
 Routes LLM calls to the right provider (DeepSeek, OpenAI, Anthropic, Ollama).

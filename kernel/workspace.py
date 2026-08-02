@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Workspace Manager
 
 Sprint 2: Project state management with lifecycle tracking.

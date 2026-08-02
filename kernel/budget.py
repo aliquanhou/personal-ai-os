@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Cost Budget Manager (Sprint 5)
 
 Controls execution costs so the AI company doesn't overspend.

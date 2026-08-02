@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Permission System
 
 Controls what agents and tools can do. Simple allow/deny with scope tracking.

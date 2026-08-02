@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Agent — Project Manager
 
 P0-3: The first real agent. Takes a high-level goal and produces:

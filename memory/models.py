@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Memory Kernel — Database Models"""
 
 import datetime as _dt

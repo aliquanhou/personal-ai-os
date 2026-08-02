@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Agent Registry (Sprint 3)
 
 Formal agent registration system. Each agent declares:

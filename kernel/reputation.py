@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Agent Reputation System (Sprint 5)
 
 Tracks every agent's performance history and uses it to influence routing.

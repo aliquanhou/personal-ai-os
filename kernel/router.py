@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Agent Router (Sprint 3)
 
 Intelligent task-to-agent routing with LLM-powered analysis.

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Runtime v1.3 — Task Lifecycle Controller & Error Recovery Manager
 
 The core kernel that gives Runtime (not LLM) control over task execution.

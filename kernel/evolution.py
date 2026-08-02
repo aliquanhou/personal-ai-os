@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Experience Analyzer (Sprint 6)
 
 Reads the AI organization's historical data and discovers patterns:

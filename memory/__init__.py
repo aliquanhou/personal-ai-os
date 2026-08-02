@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Memory Kernel — Package Init"""
 
 from memory.manager import MemoryManager, get_memory

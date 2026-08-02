@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Kernel Tool Contract v1.0 — Unified tool execution protocol.
 
 Every tool MUST:

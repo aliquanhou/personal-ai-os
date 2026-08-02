@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Task Graph (Sprint 3)
 
 DAG-based task dependency system for multi-agent orchestration.

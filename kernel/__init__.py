@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Package Init"""
 
 from kernel.config import Config, get_config, set_config

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Agent Communication Layer (Sprint 4)
 
 Three communication primitives for multi-agent collaboration:

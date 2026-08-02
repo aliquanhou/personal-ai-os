@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Skill Registry (Sprint 6.5)
 
 Decouples professional capabilities from agents. Each Skill is a standalone

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Agents — Coding Agent
 
 Handles code generation, review, and debugging tasks.

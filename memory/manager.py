@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Memory Kernel — Memory Manager
 
 The Memory Manager is the central memory system. It stores and retrieves everything

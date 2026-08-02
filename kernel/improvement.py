@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Improvement Proposal System (Sprint 6)
 
 Generates concrete improvement proposals from PatternReport analysis.

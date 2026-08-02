@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Kernel Task Context — shared workspace root for all tools.
 
 Solves the 'cwd drift' problem: ShellTool uses Path.cwd() (which is

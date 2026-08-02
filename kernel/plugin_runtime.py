@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Personal AI OS Kernel — Plugin Runtime (Sprint 8)
 
 Plugin lifecycle manager. Builds on AgentRegistry + SkillRegistry.
