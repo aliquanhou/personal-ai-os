@@ -1,0 +1,9 @@
+{
+  "name": "hello_diag",
+  "slug": "hello_diag",
+  "description": "创建 workspace/projects/hello_diag/main.py，内容是 print(\"Hello AI OS\")。创建后运行它。只做这两件事，不要探索目录。",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T18:19:54.275883+00:00",
+  "updated_at": "2026-08-02T18:19:54.275883+00:00"
+}

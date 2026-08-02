@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from kernel.tool_contract import ToolResult, ToolErrorCode, ContractViolation
+from kernel.tool_contract import ToolResult, ToolErrorCode, ContractViolation, ToolContract
 
 logger = logging.getLogger(__name__)
 
@@ -168,11 +168,16 @@ class WriteFileTool(BaseTool):
         t0 = time.time()
         try:
             p = Path(path)
+            # If relative, resolve from project root (not cwd)
+            if not p.is_absolute():
+                project_root = Path(__file__).parent.parent
+                p = (project_root / p).resolve()
+            p = p.resolve()
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(content, encoding="utf-8")
             return ToolResult.ok(
-                stdout=f"File written: {path} ({len(content)} chars)",
-                data={"path": path, "size": len(content)},
+                stdout=f"File written: {p} ({len(content)} chars)",
+                data={"path": str(p), "size": len(content)},
                 duration_ms=(time.time() - t0) * 1000,
             )
         except Exception as e:

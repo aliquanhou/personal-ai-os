@@ -101,6 +101,16 @@ class BaseAgent(ABC):
         messages = self._build_messages(ctx)
         await self._emit_lifecycle(lc, ctx.goal, ctx.session_id)
 
+        # v1.5.1: Force write_file for file-creation tasks (user-level, not system)
+        if any(kw in ctx.goal for kw in
+               ["创建", "main.py", "README", ".md", ".py", "文件", "生成", "编写"]):
+            messages.append({"role": "user", "content": (
+                "重要补充：你必须使用 write_file 工具来创建每个文件。"
+                "不要使用 shell 来创建文件。不要扫描目录。"
+                "直接依次调用 write_file 创建所有要求的文件，"
+                "然后用 shell 运行验证。立即开始。"
+            )})
+
         try:
             while lc.can_continue():
                 lc.advance_iteration()
@@ -149,6 +159,15 @@ class BaseAgent(ABC):
         except Exception as e:
             return self._handle_crash(e, ctx, state, start_time)
 
+        # Minimum output guard — never return empty response
+        if not state["final_output"].strip():
+            tools_ok = sum(1 for t in state["tool_calls"] if t["success"])
+            tools_total = len(state["tool_calls"])
+            state["final_output"] = (
+                f"任务执行完毕。\n"
+                f"工具调用: {tools_ok}/{tools_total} 成功。\n"
+                f"阶段: {lc.stage.value}。"
+            )
         duration = (time.time() - start_time) * 1000
         self._record_post_run(ctx, state, duration)
         return AgentResult(
@@ -362,10 +381,19 @@ class BaseAgent(ABC):
     # ═══════════════════════════════════════════════════════
 
     def _append_progress(self, lc, state: dict) -> None:
-        """Append goal progress to final output."""
+        """Append goal progress to final output. Also applies minimum guard."""
         if not lc.tracker.items:
+            if not state["final_output"].strip():
+                state["final_output"] = "任务处理完毕。Agent 已完成当前步骤。"
             return
         progress = lc.tracker.progress()
+        if not state["final_output"].strip():
+            state["final_output"] = (
+                f"Agent 执行完成。\n"
+                f"目标进度：{progress['fulfilled']}/{progress['items']}。\n"
+                f"阶段：{lc.stage.value}。"
+            )
+            return
         if lc.tracker.all_fulfilled():
             state["final_output"] += (
                 f"\n\n✅ 任务完成：{progress['fulfilled']}/{progress['items']} 项要求已满足。"
@@ -549,8 +577,11 @@ class AgentRuntime:
         memory_ctx = agent.memory.get_memory_context(query=goal, context_mode=context_mode)
         workspace = get_workspace()
 
-        if project_slug:
-            workspace.create_project(project_slug, description=goal[:200])
+        # v1.5.1: Don't auto-create workspace — let agent create files.
+        # Auto-creating the directory before the agent runs causes the LLM
+        # to see the directory already exists and think "task done."
+        # if project_slug:
+        #     workspace.create_project(project_slug, description=goal[:200])
 
         resume_data = None
         if resume and project_slug:
