@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kernel.tool_contract import ToolResult, ToolErrorCode, ContractViolation, ToolContract
+from kernel.context import get_project_root, resolve_path
 
 logger = logging.getLogger(__name__)
 
@@ -167,12 +168,7 @@ class WriteFileTool(BaseTool):
     async def execute(self, path: str = "", content: str = "") -> ToolResult:
         t0 = time.time()
         try:
-            p = Path(path)
-            # If relative, resolve from project root (not cwd)
-            if not p.is_absolute():
-                project_root = Path(__file__).parent.parent
-                p = (project_root / p).resolve()
-            p = p.resolve()
+            p = resolve_path(path)
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(content, encoding="utf-8")
             return ToolResult.ok(
@@ -259,13 +255,13 @@ On Windows: commands run through bash (Git Bash). Use Unix-style syntax.""",
                 result = subprocess.run(
                     [bash, "-c", command],
                     capture_output=True, text=True, timeout=timeout,
-                    cwd=str(Path.cwd()),
+                    cwd=str(get_project_root()),
                     env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"},
                 )
             else:
                 result = subprocess.run(
                     command, shell=True, capture_output=True, text=True,
-                    timeout=timeout, cwd=str(Path.cwd()),
+                    timeout=timeout, cwd=str(get_project_root()),
                 )
 
             stdout = (result.stdout or "").strip()

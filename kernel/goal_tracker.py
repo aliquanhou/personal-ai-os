@@ -325,22 +325,10 @@ def _resolve_path(target: str) -> Path | None:
     """Resolve a target path relative to the project root."""
     if not target:
         return None
-    clean = target.strip().replace("\\", "/").rstrip("/")
-    candidates = [
-        Path(clean),
-        Path("workspace") / "projects" / clean,
-        Path("workspace") / clean,
-    ]
-    for p in candidates:
-        try:
-            resolved = p.resolve()
-            if resolved.exists():
-                return resolved
-        except OSError:
-            continue
+    from kernel.context import resolve_path as ctx_resolve
     try:
-        return candidates[0].resolve()
-    except OSError:
+        return ctx_resolve(target)
+    except Exception:
         return None
 
 
