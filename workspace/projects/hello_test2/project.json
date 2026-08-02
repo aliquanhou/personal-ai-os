@@ -1,0 +1,9 @@
+{
+  "name": "hello_test2",
+  "slug": "hello_test2",
+  "description": "创建 workspace/projects/hello_test2。要求：1.创建 main.py（输出Hello AI OS）2.创建 README.md 3.运行验证。完成后立即停止。",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T18:15:47.696616+00:00",
+  "updated_at": "2026-08-02T18:15:47.696616+00:00"
+}

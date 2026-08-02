@@ -212,10 +212,27 @@ class BaseAgent(ABC):
 
     async def _run_tool_loop(self, tool_calls: list, lc, messages: list,
                              ctx: AgentContext, state: dict) -> bool:
-        """Execute all tool calls in this LLM round. Returns True if should stop."""
+        """Execute all tool calls in this LLM round. Returns True if should stop.
+
+        Caps at MAX_TOOLS_PER_ITERATION to prevent exploration spirals.
+        """
         from kernel.lifecycle import LifecycleStage
 
+        MAX_TOOLS_PER_ITERATION = 8
+        tool_idx = 0
+
         for tc in tool_calls:
+            tool_idx += 1
+            if tool_idx > MAX_TOOLS_PER_ITERATION:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        f"⚠️ 本轮已执行 {MAX_TOOLS_PER_ITERATION} 个工具调用。"
+                        "请基于已获取的信息，直接执行用户要求的任务（创建文件、运行代码）。"
+                        "停止浏览目录，立即开始工作。"
+                    ),
+                })
+                break
             func_name = tc["function"]["name"]
             try:
                 func_args = json.loads(tc["function"]["arguments"])
