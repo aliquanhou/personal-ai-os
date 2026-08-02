@@ -35,6 +35,8 @@ from kernel.workspace import WorkspaceManager, get_workspace
 # Sprint 5
 from kernel.audit import get_audit_log, AuditCategory, AuditSeverity
 from kernel.reputation import get_reputation_registry
+# Sprint 6.5
+from kernel.skill_executor import get_skill_executor, SkillContext
 from memory.manager import MemoryManager, get_memory
 from tools.registry import ToolRegistry, get_tool_registry
 
@@ -117,9 +119,17 @@ class BaseAgent(ABC):
             source=self.name,
         ))
 
+        # Sprint 6.5: Build system prompt with skill injection
+        base_prompt = self.system_prompt(ctx)
+        try:
+            executor = get_skill_executor()
+            system_prompt = executor.inject_into_context(self.name, base_prompt)
+        except Exception:
+            system_prompt = base_prompt
+
         # Build messages — if resuming, prepend checkpoint context
         messages = [
-            {"role": "system", "content": self.system_prompt(ctx)},
+            {"role": "system", "content": system_prompt},
         ]
         # Sprint 4: Inject handoff context from previous agent
         if ctx.handoff_context:
@@ -310,6 +320,7 @@ class BaseAgent(ABC):
                                   context={"goal": ctx.goal[:200], "iteration": ctx.current_iteration})
                 get_reputation_registry().record(self.name, False, err_duration,
                                                  tool_calls=len(tool_calls_log))
+                get_skill_executor().record_execution(self.name, False, err_duration)
             except Exception:
                 pass
 
@@ -332,6 +343,12 @@ class BaseAgent(ABC):
             rep.record(self.name, True, duration,
                       tool_calls=len(tool_calls_log),
                       hit_max_iterations=hit_max)
+        except Exception:
+            pass
+
+        # Sprint 6.5: Record skill execution
+        try:
+            get_skill_executor().record_execution(self.name, True, duration)
         except Exception:
             pass
 

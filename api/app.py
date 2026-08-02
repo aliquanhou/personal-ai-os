@@ -52,6 +52,15 @@ from kernel.improvement import (
     ProposalType,
 )
 from kernel.experiment import get_experiment_runner
+# Sprint 6.5
+from kernel.skill_registry import (
+    get_skill_registry,
+    SkillCategory,
+    SkillDefinition,
+    SkillRating,
+)
+from kernel.skill_router import get_skill_router
+from kernel.skill_executor import get_skill_executor
 from memory.manager import get_memory
 from tools.registry import get_tool_registry
 
@@ -192,6 +201,12 @@ async def startup():
                 len(org_status["agents"]), len(org_status["channels"]),
                 org_status["total_messages_routed"])
 
+    # Sprint 6.5: Initialize Skill System
+    skill_registry = get_skill_registry()
+    logger.info("Skill Registry: %s skills loaded, %s agent assignments",
+                skill_registry.get_total_skill_count(),
+                skill_registry.get_stats()["agents_with_skills"])
+
 
 # ── Models ─────────────────────────────────────────────
 
@@ -270,6 +285,15 @@ class ProjectCreate(BaseModel):
     name: str
     description: str = ""
     goals: list[str] = []
+
+
+class SkillMatchRequest(BaseModel):
+    required_capabilities: list[str]
+    preferred_agent: str = ""
+
+
+class SkillRecommendRequest(BaseModel):
+    required_capabilities: list[str]
 
 
 # ── Routes: Health ─────────────────────────────────────
@@ -1195,6 +1219,133 @@ async def list_experiments(status: str = ""):
     elif status == "completed":
         return {"experiments": runner.list_completed()}
     return {"experiments": runner.list_all()}
+
+
+# ── Sprint 6.5: Skill Routes ──────────────────────────
+
+@app.get("/api/skills")
+async def list_skills(category: str = ""):
+    """List all registered skills."""
+    reg = get_skill_registry()
+    if category:
+        return {"skills": [s.to_dict() for s in reg.list_by_category(category)]}
+    return {"skills": [s.to_dict() for s in reg.list_all()]}
+
+
+@app.get("/api/skills/ratings")
+async def get_all_skill_ratings():
+    """Get ratings for all skills, sorted by reputation."""
+    return {"ratings": get_skill_registry().get_skill_ratings()}
+
+
+@app.get("/api/skills/stats")
+async def get_skill_stats():
+    """Get skill system statistics."""
+    reg = get_skill_registry()
+    return {
+        "stats": reg.get_stats(),
+        "ratings": reg.get_skill_ratings(),
+    }
+
+
+@app.get("/api/skills/{skill_name}")
+async def get_skill(skill_name: str):
+    """Get a single skill definition."""
+    skill = get_skill_registry().get_by_name(skill_name)
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill not found: {skill_name}")
+    return skill.to_dict()
+
+
+@app.get("/api/skills/{skill_name}/agents")
+async def get_skill_agents(skill_name: str):
+    """Get which agents have a specific skill."""
+    agents = get_skill_registry().get_agents_for_skill(skill_name)
+    return {"skill": skill_name, "agents": agents}
+
+
+@app.get("/api/skills/{skill_name}/rating")
+async def get_skill_rating(skill_name: str):
+    """Get rating for a specific skill."""
+    skill = get_skill_registry().get_by_name(skill_name)
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill not found: {skill_name}")
+    return {"skill": skill_name, "rating": skill.rating.to_dict()}
+
+
+# Agent Skill Management
+@app.get("/api/agents/{agent_name}/skills")
+async def get_agent_skills(agent_name: str):
+    """Get an agent's skill composition."""
+    profile = get_skill_registry().get_agent_skill_profile(agent_name)
+    return profile
+
+
+@app.get("/api/agents/{agent_name}/capabilities")
+async def get_agent_capability_summary(agent_name: str):
+    """Get what an agent can do, based on skill composition."""
+    return get_skill_executor().get_agent_capability_summary(agent_name)
+
+
+@app.post("/api/agents/{agent_name}/skills")
+async def assign_skills_to_agent(agent_name: str, req: SkillRecommendRequest):
+    """Assign skills to an agent."""
+    skill_names = req.required_capabilities
+    ok = get_skill_registry().assign_to_agent(agent_name, skill_names)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Skill assignment failed. Check prerequisites.")
+    get_skill_executor().invalidate_cache(agent_name)
+    return {"status": "assigned", "agent": agent_name, "skills": skill_names}
+
+
+
+
+@app.post("/api/skills/match")
+async def match_skills_for_task(req: SkillMatchRequest):
+    """Find the best skills matching required capabilities."""
+    plan = get_skill_router().match(req.required_capabilities, req.preferred_agent)
+    return {
+        "matches": [
+            {
+                "skill": m.skill_name,
+                "display_name": m.display_name,
+                "score": m.score,
+                "agent": m.agent_name,
+            }
+            for m in plan.matches
+        ],
+        "recommended_agent": plan.recommended_agent,
+        "prerequisite_chain": plan.prerequisite_chain,
+        "confidence": plan.confidence,
+    }
+
+
+@app.post("/api/skills/recommend-agent")
+async def recommend_agent_for_task(req: SkillRecommendRequest):
+    """Find the best agent for a task based on skill composition."""
+    return get_skill_router().get_best_agent_for_task(req.required_capabilities)
+
+
+@app.post("/api/skills/gap-analysis/{agent_name}")
+async def agent_skill_gap_analysis(agent_name: str, req: SkillRecommendRequest):
+    """Analyze skill gaps for an agent against task requirements."""
+    return get_skill_router().recommend_skills_for_agent(agent_name, req.required_capabilities)
+
+
+@app.post("/api/skills/{skill_name}/record")
+async def record_skill_usage(skill_name: str, success: bool, duration_ms: float):
+    """Record a skill execution for rating."""
+    ok = get_skill_registry().record_skill_use(skill_name, success, duration_ms)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"Skill not found: {skill_name}")
+    return {"status": "recorded"}
+
+
+@app.post("/api/skills/compile-prompt/{agent_name}")
+async def compile_skill_prompt(agent_name: str):
+    """Preview the compiled skill prompt for an agent."""
+    prompt = get_skill_registry().compile_skill_prompt(agent_name)
+    return {"agent": agent_name, "prompt": prompt}
 
 
 # ── Static Files (Studio) ──────────────────────────────

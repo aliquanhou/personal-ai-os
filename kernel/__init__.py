@@ -74,6 +74,25 @@ from kernel.experiment import (
     ExperimentStatus,
     get_experiment_runner,
 )
+# Sprint 6.5
+from kernel.skill_registry import (
+    SkillCategory,
+    SkillDefinition,
+    SkillRating,
+    SkillRegistry,
+    get_skill_registry,
+)
+from kernel.skill_router import (
+    SkillMatch,
+    SkillPlan,
+    SkillRouter,
+    get_skill_router,
+)
+from kernel.skill_executor import (
+    SkillContext,
+    SkillExecutor,
+    get_skill_executor,
+)
 
 __all__ = [
     "Config", "get_config", "set_config",
@@ -100,4 +119,9 @@ __all__ = [
     "ProposalType", "get_improvement_registry",
     "Experiment", "ExperimentRunner", "ExperimentStatus",
     "get_experiment_runner",
+    # Sprint 6.5
+    "SkillCategory", "SkillDefinition", "SkillRating",
+    "SkillRegistry", "get_skill_registry",
+    "SkillMatch", "SkillPlan", "SkillRouter", "get_skill_router",
+    "SkillContext", "SkillExecutor", "get_skill_executor",
 ]
