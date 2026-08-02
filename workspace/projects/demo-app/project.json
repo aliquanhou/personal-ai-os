@@ -1,0 +1,1 @@
+{"name": "TaskFlow - Project Management App", "slug": "demo-app", "description": "Simple project management tool. FastAPI + React + SQLite.", "goals": ["Build a working task tracker"], "status": "active", "created_at": "2026-08-02T00:00:00Z", "updated_at": "2026-08-02T00:00:00Z"}
