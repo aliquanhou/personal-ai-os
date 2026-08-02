@@ -1,0 +1,45 @@
+[project]
+name = "personal-ai-os"
+version = "0.1.0"
+description = "Personal AI Operating System — your AI employee that remembers, executes, and grows"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "sqlalchemy>=2.0.35",
+    "aiosqlite>=0.20.0",
+    "pydantic>=2.10.0",
+    "httpx>=0.28.0",
+    "openai>=1.55.0",
+    "anthropic>=0.40.0",
+    "redis>=5.2.0",
+    "python-dotenv>=1.0.1",
+    "websockets>=14.1",
+    "typer>=0.15.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.28.0",
+    "black>=24.10.0",
+    "ruff>=0.8.0",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["kernel*", "memory*", "agents*", "tools*", "plugins*", "api*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Environment
+.env
+.env.local
+
+# Data
+data/*.db
+memory_data/
+sqlite+aiodata/
+
+# Node
+node_modules/
+studio/dist/
+studio/.vite/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Workspace backups (auto-generated)
+workspace/projects/**/backups/
+
+# Pytest
+.pytest_cache/
+htmlcov/
+.coverage

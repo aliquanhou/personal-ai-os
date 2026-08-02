@@ -1,0 +1,27 @@
+{
+  "last_checkpoint": {
+    "step": "crashed: ToolRegistry.execute() got multiple values for argument 'name'",
+    "iteration": 1,
+    "goal": "帮我写一个简单的Python脚本，计算斐波那契数列前20个数字，保存到 workspace/projects/test-project-sprint-2/artifacts/ 目录下。先创建项目workspace，然后写代码，每完成一步保存checkpoint。",
+    "completed": "0/0 tool calls succeeded",
+    "last_tool": "none",
+    "timestamp": "2026-08-02T10:20:41.580023+00:00"
+  },
+  "checkpoint_history": [
+    {
+      "step": "crashed: ToolRegistry.execute() got multiple values for argument 'name'",
+      "iteration": 1,
+      "goal": "帮我写一个简单的Python脚本，计算斐波那契数列前20个数字，保存到 workspace/projects/test-project-sprint-2/artifacts/ 目录下。先创建项目workspace，然后写代码，每完成一步保存checkpoint。",
+      "completed": "0/0 tool calls succeeded",
+      "last_tool": "none",
+      "timestamp": "2026-08-02T10:20:41.580023+00:00"
+    }
+  ],
+  "active_tasks": [],
+  "last_action": {
+    "type": "checkpoint",
+    "step": "crashed: ToolRegistry.execute() got multiple values for argument 'name'",
+    "timestamp": "2026-08-02T10:20:41.580023+00:00"
+  },
+  "status": "active"
+}

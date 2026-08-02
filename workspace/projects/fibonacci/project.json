@@ -1,0 +1,9 @@
+{
+  "name": "Fibonacci",
+  "slug": "fibonacci",
+  "description": "计算斐波那契数列",
+  "goals": [],
+  "status": "active",
+  "created_at": "2026-08-02T10:21:21.981381+00:00",
+  "updated_at": "2026-08-02T10:21:21.981381+00:00"
+}

@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-gray-100 antialiased;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-kernel-600 hover:bg-kernel-700 text-white px-4 py-2 rounded-lg transition-colors font-medium disabled:opacity-50;
+  }
+  .btn-secondary {
+    @apply bg-gray-800 hover:bg-gray-700 text-gray-200 px-4 py-2 rounded-lg transition-colors;
+  }
+  .input-field {
+    @apply bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-kernel-500 focus:ring-1 focus:ring-kernel-500;
+  }
+  .card {
+    @apply bg-gray-900 border border-gray-800 rounded-xl p-4;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+/* Code blocks in chat */
+.message-content pre {
+  @apply bg-gray-950 rounded-lg p-3 overflow-x-auto text-sm my-2 border border-gray-800;
+}
+.message-content code {
+  @apply bg-gray-800 text-kernel-300 px-1.5 py-0.5 rounded text-sm;
+}
+.message-content pre code {
+  @apply bg-transparent text-gray-200 p-0;
+}
